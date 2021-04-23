@@ -31,7 +31,6 @@ def wbtc(interface):
     yield interface.ERC20('0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599')
 
 @pytest.fixture
-<<<<<<< Updated upstream
 def dai(interface):
     #this one is hbtc
     yield interface.ERC20('0x6b175474e89094c44da98b954eedeac495271d0f')
@@ -40,10 +39,6 @@ def dai(interface):
 def usdt(interface):
     #this one is hbtc
     yield interface.ERC20('0xdAC17F958D2ee523a2206206994597C13D831ec7')
-
-
-@pytest.fixture
-def whale(accounts, web3, currency, chain, wbtc, dai):
 
 def susd(interface):
     yield interface.ERC20('0x57Ab1ec28D129707052df4dF418D58a2D46d5f51')
@@ -262,7 +257,6 @@ def live_usdt_vault(pm):
     vault = Vault.at('0x7Da96a3891Add058AdA2E826306D812C638D87a7')
     yield vault
 
-<<<<<<< Updated upstream
 @pytest.fixture
 def strategy_usdt_ib(strategist,Strategy, keeper, live_usdt_vault, live_strategy_wbtc, ibCurvePool, ib3CRV, ibyvault):
     #strategy = strategist.deploy(Strategy, live_usdt_vault, 500_000*1e6, 3600, 500, ibCurvePool, ib3CRV, ibyvault,3, True)
@@ -282,8 +276,7 @@ def strategy_wbtc_hbtc(strategist, keeper, live_wbtc_vault, Strategy, curvePool,
     strategy.setKeeper(keeper)
     yield strategy
 
-=======
->>>>>>> Stashed changes
+
 @pytest.fixture
 def strategy_wbtc_obtc(strategist, keeper, live_wbtc_vault, Strategy, curvePoolObtc, obCRV, yvaultv2Obtc):
     strategy = strategist.deploy(Strategy, live_wbtc_vault, 30*1e8, 3600, 500, curvePoolObtc, obCRV, yvaultv2Obtc,4, False)
