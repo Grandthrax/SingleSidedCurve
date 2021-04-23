@@ -274,7 +274,6 @@ contract Strategy is BaseStrategy {
         uint256 currentValue = estimatedTotalAssets();
         uint256 wantBalance = want.balanceOf(address(this));
 
-
         if(debt < currentValue){
             //profit
             _profit = currentValue.sub(debt);
