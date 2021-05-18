@@ -83,13 +83,10 @@ def yvaultv2Obtc(interface):
 def yhbtcstrategyv2(Strategy):
     yield Strategy.at('0x91cBf0014a966615e1050c90A1aBf1d1d5d8cffd')
 
-<<<<<<< HEAD
 @pytest.fixture
 def wbtcstrategynew(Strategy):
     yield Strategy.at('0xb85413f6d07454828eAc7E62df7d847316475178')
 
-=======
->>>>>>> e92e1d2 (fix: solved hasUnderlying for saave)
 @pytest.fixture
 def ibyvault(Vault):
     yield Vault.at('0x27b7b1ad7288079A66d12350c828D3C00A6F07d7')
