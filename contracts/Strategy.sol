@@ -213,7 +213,7 @@ contract Strategy is BaseStrategy {
         }
 
         //we want to choose lower value of virtual price and amount we really get out
-        //this means we will always underestimate current assets. 
+        //this means we will always underestimate current assets.
         uint256 virtualOut = virtualPriceToWant().mul(tokens).div(1e18);
 
         /*uint256 realOut;
@@ -222,7 +222,7 @@ contract Strategy is BaseStrategy {
         }else{
             realOut = curvePool.calc_withdraw_one_coin(tokens, curveId);
         }*/
-        
+
 
         //return Math.min(virtualOut, realOut);
         return virtualOut;

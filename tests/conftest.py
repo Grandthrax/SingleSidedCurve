@@ -40,9 +40,9 @@ def usdt(interface):
     #this one is hbtc
     yield interface.ERC20('0xdAC17F958D2ee523a2206206994597C13D831ec7')
 
+@pytest.fixture
 def susd(interface):
     yield interface.ERC20('0x57Ab1ec28D129707052df4dF418D58a2D46d5f51')
-
 
 @pytest.fixture
 def whale(accounts, web3, currency, chain, wbtc, dai, susd):
@@ -55,14 +55,14 @@ def whale(accounts, web3, currency, chain, wbtc, dai, susd):
     acc = accounts.at("0xA929022c9107643515F5c777cE9a910F0D1e490C", force=True)
     #big huboi wallet
     #acc = accounts.at('0x24d48513EAc38449eC7C310A79584F87785f856F', force=True)
-
+    susdAcc = accounts.at("0x49be88f0fcc3a8393a59d3688480d7d253c37d2a", force=True)
 
 
     #wbtc account
     wb = accounts.at('0x3dfd23A6c5E8BbcFc9581d2E864a68feb6a076d3', force=True)
     wbtc.transfer(acc, wbtc.balanceOf(wb),  {'from': wb})
     dai.transfer(acc, dai.balanceOf(daiAcc),  {'from': daiAcc})
-    susd.transfer(acc, susd.balanceOf(wb),  {'from': wb})
+    susd.transfer(acc, susd.balanceOf(susdAcc),  {'from': susdAcc})
 
     assert currency.balanceOf(acc)  > 0
     assert wbtc.balanceOf(acc)  > 0
@@ -83,10 +83,13 @@ def yvaultv2Obtc(interface):
 def yhbtcstrategyv2(Strategy):
     yield Strategy.at('0x91cBf0014a966615e1050c90A1aBf1d1d5d8cffd')
 
+<<<<<<< HEAD
 @pytest.fixture
 def wbtcstrategynew(Strategy):
     yield Strategy.at('0xb85413f6d07454828eAc7E62df7d847316475178')
 
+=======
+>>>>>>> e92e1d2 (fix: solved hasUnderlying for saave)
 @pytest.fixture
 def ibyvault(Vault):
     yield Vault.at('0x27b7b1ad7288079A66d12350c828D3C00A6F07d7')
@@ -113,6 +116,12 @@ def live_wbtc_vault(pm):
 def obCRV(interface):
     yield interface.ICrvV3('0x2fE94ea3d5d4a175184081439753DE15AeF9d614')
 @pytest.fixture
+def live_susd_vault(pm):
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = Vault.at('0xa5cA62D95D24A4a350983D5B8ac4EB8638887396')
+    yield vault
+
+@pytest.fixture
 def ysusdstrategyv2(Strategy):
     yield Strategy.at('0xE73817de3418bB44A4FeCeBa53Aa835333C550e7')
 
@@ -125,6 +134,10 @@ def saCRV(interface):
     yield interface.ICrvV3('0x02d341CcB60fAaf662bC0554d13778015d1b285C')
 
 @pytest.fixture
+def ib3CRV(interface):
+    yield interface.ICrvV3('0x5282a4eF67D9C33135340fB3289cc1711c13638C')
+
+@pytest.fixture
 def curvePool(interface):
     yield interface.ICurveFi('0x4CA9b3063Ec5866A4B82E437059D2C43d1be596F')
 @pytest.fixture
@@ -135,9 +148,6 @@ def ibCurvePool(interface):
     yield interface.ICurveFi('0x2dded6Da1BF5DBdF597C45fcFaa3194e53EcfeAF')
 
 @pytest.fixture
-def ib3CRV(interface):
-    yield interface.ICrvV3('0x5282a4eF67D9C33135340fB3289cc1711c13638C')
-    
 def curvePoolSUSD(interface):
     yield interface.ICurveFi('0xEB16Ae0052ed37f479f7fe63849198Df1765a733')
 
@@ -276,6 +286,11 @@ def strategy_wbtc_hbtc(strategist, keeper, live_wbtc_vault, Strategy, curvePool,
     strategy.setKeeper(keeper)
     yield strategy
 
+@pytest.fixture
+def strategy_saave(strategist, keeper, live_susd_vault, Strategy, curvePoolSUSD, saCRV, yvaultv2SAAVE):
+    strategy = strategist.deploy(Strategy, live_susd_vault, 1_500_000 * 1e18, 3600, 50, curvePoolSUSD, saCRV, yvaultv2SAAVE, 2, True)
+    strategy.setKeeper(keeper)
+    yield strategy
 
 @pytest.fixture
 def strategy_wbtc_obtc(strategist, keeper, live_wbtc_vault, Strategy, curvePoolObtc, obCRV, yvaultv2Obtc):
