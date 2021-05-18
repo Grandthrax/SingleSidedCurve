@@ -59,7 +59,9 @@ def test_susd_1(
     whale_before = currency.balanceOf(whale)
     whale_deposit = 1_000_000 * (10 ** (decimals))
     idl = Strategy.at(vault.withdrawalQueue(0))
+    idl2 = Strategy.at(vault.withdrawalQueue(1))
     idl.harvest({"from": gov})
+    idl2.harvest({"from": gov})
     chain.sleep(6 * 3600 + 1)
     chain.mine(1)
 
@@ -67,11 +69,13 @@ def test_susd_1(
     vault.setManagementFee(0, {"from": gov})
 
     vault.updateStrategyDebtRatio(idl, 0, {"from": gov})
+    vault.updateStrategyDebtRatio(idl2, 0, {"from": gov})
     before = vault.totalAssets()
 
     debt_ratio = 10_000
     vault.addStrategy(strategy, debt_ratio, 0, 2 ** 256 - 1, 1000, {"from": gov})
     idl.harvest({"from": gov})
+    idl2.harvest({"from": gov})
     chain.sleep(6 * 3600 + 1)
     chain.mine(1)
 
