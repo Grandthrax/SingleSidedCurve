@@ -1,5 +1,5 @@
 from itertools import count
-from brownie import Wei, reverts
+from brownie import Wei, reverts, Contract
 import eth_abi
 from brownie.convert import to_bytes
 from useful_methods import genericStateOfStrat,genericStateOfVault
@@ -40,6 +40,8 @@ def test_dai_1(usdt,stratms, whale,Strategy, ibCurvePool,strategy_dai_ib, accoun
     vault.updateStrategyDebtRatio(idl, 0 , {"from": gov})
     debt_ratio = 2000
     #v0.3.0
+    fStrat = Contract(vault.withdrawalQueue(0))
+    vault.updateStrategyDebtRatio(fStrat, 0 , {"from": gov})
     vault.addStrategy(strategy, debt_ratio, 0, 1000, {"from": gov})
     idl.harvest({'from': gov})
     idl.harvest({'from': gov})
@@ -85,7 +87,7 @@ def test_migrate(usdt,stratms, ibCurvePool,Strategy, accounts, ib3CRV,ibyvault, 
     #print("real: ", ibCurvePool.calc_token_amount(amounts, True))
 
     idl = Strategy.at(vault.withdrawalQueue(0))
-    vault.updateStrategyDebtRatio(idl, 0 , {"from": gov})
+    vault.updateStrategyDebtRatio(idl, 0 , {"from": vault.governance()})
     debt_ratio = 9500
     vault.addStrategy(strategy, debt_ratio, 0, 2 ** 256 - 1, 1000, {"from": gov})
     idl.harvest({'from': gov})

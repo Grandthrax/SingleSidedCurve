@@ -115,8 +115,6 @@ def test_wbtc_1(currency,Strategy, strategy_wbtc_hbtc,curvePool, accounts, hCRV,
     chain.mine(1)
 
     yhbtcstrategyv2.harvest({'from': orb})
-    
-
     chain.sleep(21600)
     chain.mine(1)
     strategy.harvest({'from': strategist})
