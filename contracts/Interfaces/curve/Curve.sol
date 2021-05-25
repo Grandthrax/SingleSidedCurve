@@ -45,15 +45,27 @@ interface ICurveFi {
     ) external payable;
 
     function coins(uint256) external returns (address);
+
     function underlying_coins(uint256) external returns (address);
 
-    function remove_liquidity_imbalance(uint256[2] calldata amounts, uint256 max_burn_amount) external;
+    function remove_liquidity_imbalance(
+        uint256[2] calldata amounts,
+        uint256 max_burn_amount
+    ) external;
 
-    function remove_liquidity(uint256 _amount, uint256[2] calldata amounts) external;
+    function remove_liquidity(uint256 _amount, uint256[2] calldata amounts)
+        external;
 
-    function calc_withdraw_one_coin(uint256 _amount, int128 i) external view returns (uint256);
+    function calc_withdraw_one_coin(uint256 _amount, int128 i)
+        external
+        view
+        returns (uint256);
 
-    function calc_withdraw_one_coin(uint256 _amount, int128 i, bool use_underlying) external view returns (uint256);
+    function calc_withdraw_one_coin(
+        uint256 _amount,
+        int128 i,
+        bool use_underlying
+    ) external view returns (uint256);
 
     function remove_liquidity_one_coin(
         uint256 _token_amount,
@@ -83,9 +95,20 @@ interface ICurveFi {
         uint256 _from_amount
     ) external view returns (uint256);
 
-    function calc_token_amount( uint256[2] calldata amounts, bool is_deposit) external view returns (uint256);
-    function calc_token_amount( uint256[3] calldata amounts, bool is_deposit) external view returns (uint256);
-    function calc_token_amount( uint256[4] calldata amounts, bool is_deposit) external view returns (uint256);
+    function calc_token_amount(uint256[2] calldata amounts, bool is_deposit)
+        external
+        view
+        returns (uint256);
+
+    function calc_token_amount(uint256[3] calldata amounts, bool is_deposit)
+        external
+        view
+        returns (uint256);
+
+    function calc_token_amount(uint256[4] calldata amounts, bool is_deposit)
+        external
+        view
+        returns (uint256);
 }
 
 interface Zap {
