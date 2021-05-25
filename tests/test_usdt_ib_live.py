@@ -12,7 +12,6 @@ import brownie
 #           - change in loading (from low to high and high to low)
 #           - strategy operation at different loading levels (anticipated and "extreme")
 
-
 def test_usdt_live(
     usdt,
     stratms,
@@ -33,7 +32,8 @@ def test_usdt_live(
 ):
     gov = stratms
     vault = live_usdt_vault
-    strategy = strategy_usdt_ib
+    gov =  accounts.at(vault.governance(), force=True)
+    strategy = live_strategy_usdt
     currency = usdt
     yvault = ibyvault
     amount = 1000 * 1e6
@@ -56,15 +56,17 @@ def test_usdt_live(
     # genericStateOfStrat(strategy, currency, vault)
     # genericStateOfVault(vault, currency)
 
-    ibcrvStrat = Strategy.at(ibyvault.withdrawalQueue(0))
-    vGov = accounts.at(ibyvault.governance(), force=True)
-    chain.sleep(201600)
-    chain.mine(1)
-    ibcrvStrat.harvest({"from": vGov})
-    chain.sleep(21600)
-    chain.mine(1)
+
+    #ibcrvStrat = Strategy.at(ibyvault.withdrawalQueue(0))
+    #vGov = accounts.at(ibyvault.governance(), force=True)
+    #chain.sleep(201600)
+    #chain.mine(1)
+    #ibcrvStrat.harvest({"from": vGov})
+    #chain.sleep(21600)
+    #chain.mine(1)
     genericStateOfStrat(strategy, currency, vault)
     genericStateOfVault(vault, currency)
     strategy.harvest({"from": strategist})
+
     genericStateOfStrat(strategy, currency, vault)
     genericStateOfVault(vault, currency)

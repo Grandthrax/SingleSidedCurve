@@ -246,6 +246,12 @@ def live_strategy(Strategy):
 
 
 @pytest.fixture
+def live_strategy_usdt(Strategy):
+    strategy = Strategy.at('0xf840d061E83025F4cD6610AE5DDebCcA43327f9f')
+
+    yield strategy
+
+@pytest.fixture
 def live_strategy_wbtc(Strategy):
     strategy = Strategy.at("0x40b04B3ed9845B8Be200Aa2D9C3eDC2bE0a5f01f")
 
