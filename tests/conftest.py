@@ -241,14 +241,12 @@ def keeper(accounts):
 @pytest.fixture
 def live_strategy(Strategy):
     strategy = Strategy.at("0xCa8C5e51e235EF1018B2488e4e78e9205064D736")
-
     yield strategy
 
 
 @pytest.fixture
 def live_strategy_usdt(Strategy):
     strategy = Strategy.at("0xf840d061E83025F4cD6610AE5DDebCcA43327f9f")
-
     yield strategy
 
 
