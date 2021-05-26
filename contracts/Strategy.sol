@@ -91,6 +91,7 @@ contract Strategy is BaseStrategy, Synthetix {
     ) external {
         //note: initialise can only be called once. in _initialize in BaseStrategy we have: require(address(want) == address(0), "Strategy already initialized");
         _initialize(_vault, msg.sender, msg.sender, msg.sender);
+        _initializeSynthetix(_synth);
         _initializeStrat(
             _slippageProtectionIn,
             _curvePool,
@@ -113,7 +114,7 @@ contract Strategy is BaseStrategy, Synthetix {
     ) internal {
         require(synth_decimals == 0, "Already Initialized");
         require(_poolSize > 1 && _poolSize < 5, "incorrect pool size");
-        _initializeSynthetix(_synth);
+
         curvePool = ICurveFi(_curvePool);
 
         if (
@@ -165,6 +166,7 @@ contract Strategy is BaseStrategy, Synthetix {
         minReportDelay = 3600;
         debtThreshold = 100 * 1e18;
         withdrawProtection = true;
+        maxLoss = 1;
         synth_decimals = IERC20Extended(address(_synthCoin())).decimals();
 
         want.safeApprove(address(curvePool), uint256(-1));
@@ -232,7 +234,7 @@ contract Strategy is BaseStrategy, Synthetix {
         minTimePerInvest = _minTimePerInvest;
     }
 
-    function updateMaxSingleInvest(uint256 _maxSingleInvest)
+    function updatemaxSingleInvest(uint256 _maxSingleInvest)
         public
         onlyAuthorized
     {
@@ -391,55 +393,59 @@ contract Strategy is BaseStrategy, Synthetix {
 
         // This will invest all available sUSD (exchanging to Synth first)
 
-        // 1. Exchange full balance of sUSD to Synth
+        // 1. Exchange amount of sUSD to Synth
         // NOTE: this function is defined in Synthetix contract
-        exchangeSUSDToSynth();
+        uint256 _sUSDToInvest =
+            Math.min(_balanceOfSUSD(), _sUSDFromSynth(maxSingleInvest));
 
-        // Calculate how much Synth to invest
-        uint256 _synthToInvest = Math.min(_balanceOfSynth(), maxSingleInvest);
-        if (_synthToInvest > 0) {
-            // 2. Supply liquidity (single sided) to Curve Pool
-            uint256 expectedOut =
-                _synthToInvest.mul(1e18).div(virtualPriceToSynth());
+        uint256 _synthToInvest = exchangeSUSDToSynth(_sUSDToInvest);
 
-            // Minimum amount of LP tokens to mint
-            uint256 minMint =
-                expectedOut.mul(DENOMINATOR.sub(slippageProtectionIn)).div(
-                    DENOMINATOR
-                );
-
-            // NOTE: pool size cannot be more than 4 or less than 2
-            if (poolSize == 2) {
-                uint256[2] memory amounts;
-                amounts[uint256(curveId)] = _synthToInvest;
-                if (hasUnderlying) {
-                    curvePool.add_liquidity(amounts, minMint, true);
-                } else {
-                    curvePool.add_liquidity(amounts, minMint);
-                }
-            } else if (poolSize == 3) {
-                uint256[3] memory amounts;
-                amounts[uint256(curveId)] = _synthToInvest;
-                if (hasUnderlying) {
-                    curvePool.add_liquidity(amounts, minMint, true);
-                } else {
-                    curvePool.add_liquidity(amounts, minMint);
-                }
-            } else {
-                uint256[4] memory amounts;
-                amounts[uint256(curveId)] = _synthToInvest;
-                if (hasUnderlying) {
-                    curvePool.add_liquidity(amounts, minMint, true);
-                } else {
-                    curvePool.add_liquidity(amounts, minMint);
-                }
-            }
-
-            // 3. Deposit LP tokens in yVault
-            yvToken.deposit();
-
-            lastInvest = block.timestamp;
+        if (_synthToInvest == 0) {
+            return;
         }
+
+        // 2. Supply liquidity (single sided) to Curve Pool
+        // calculate LP tokens that we will receive
+        uint256 expectedOut =
+            _synthToInvest.mul(1e18).div(virtualPriceToSynth());
+
+        // Minimum amount of LP tokens to mint
+        uint256 minMint =
+            expectedOut.mul(DENOMINATOR.sub(slippageProtectionIn)).div(
+                DENOMINATOR
+            );
+
+        // NOTE: pool size cannot be more than 4 or less than 2
+        if (poolSize == 2) {
+            uint256[2] memory amounts;
+            amounts[uint256(curveId)] = _synthToInvest;
+            if (hasUnderlying) {
+                curvePool.add_liquidity(amounts, minMint, true);
+            } else {
+                curvePool.add_liquidity(amounts, minMint);
+            }
+        } else if (poolSize == 3) {
+            uint256[3] memory amounts;
+            amounts[uint256(curveId)] = _synthToInvest;
+            if (hasUnderlying) {
+                curvePool.add_liquidity(amounts, minMint, true);
+            } else {
+                curvePool.add_liquidity(amounts, minMint);
+            }
+        } else {
+            uint256[4] memory amounts;
+            amounts[uint256(curveId)] = _synthToInvest;
+            if (hasUnderlying) {
+                curvePool.add_liquidity(amounts, minMint, true);
+            } else {
+                curvePool.add_liquidity(amounts, minMint);
+            }
+        }
+
+        // 3. Deposit LP tokens in yVault
+        yvToken.deposit();
+
+        lastInvest = block.timestamp;
     }
 
     function liquidatePosition(uint256 _amountNeeded)
@@ -467,12 +473,12 @@ contract Strategy is BaseStrategy, Synthetix {
     {
         uint256 sUSDBalanceBefore = _balanceOfSUSD();
 
-        // LPtoken virtual price in want
-        uint256 virtualPrice = _synthToSUSD(virtualPriceToSynth());
+        // LPtoken virtual price in Synth
+        uint256 virtualPrice = virtualPriceToSynth();
 
         // 1. We calculate how many LP tokens we need to burn to get requested want
         uint256 amountWeNeedFromVirtualPrice =
-            _amount.mul(1e18).div(virtualPrice);
+            _synthFromSUSD(_amount).mul(1e18).div(virtualPrice);
 
         // 2. Withdraw LP tokens from yVault
         uint256 crvBeforeBalance = curveToken.balanceOf(address(this));
@@ -480,14 +486,15 @@ contract Strategy is BaseStrategy, Synthetix {
         // Calculate how many shares we need to burn to get the amount of LP tokens that we want
         uint256 pricePerFullShare = yvToken.pricePerShare();
         uint256 amountFromVault =
-            amountWeNeedFromVirtualPrice.mul(1e18).div(pricePerFullShare);
+            pricePerFullShare > 0
+                ? amountWeNeedFromVirtualPrice.mul(1e18).div(pricePerFullShare)
+                : type(uint256).max;
 
         // cap to our yShares balance
         uint256 yBalance = yvToken.balanceOf(address(this));
         if (amountFromVault > yBalance) {
             amountFromVault = yBalance;
             // this is not loss. so we amend amount
-            // TODO: confirm with Sam
 
             uint256 _amountOfCrv =
                 amountFromVault.mul(pricePerFullShare).div(1e18);

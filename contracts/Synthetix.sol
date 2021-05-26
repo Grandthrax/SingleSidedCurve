@@ -2,6 +2,7 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./Interfaces/synthetix/ISynth.sol";
@@ -13,9 +14,10 @@ import "./Interfaces/synthetix/IExchangeRates.sol";
 import "./Interfaces/synthetix/IAddressResolver.sol";
 
 contract Synthetix {
+    using SafeMath for uint256;
     // ========== SYNTHETIX CONFIGURATION ==========
     bytes32 public constant sUSD = "sUSD";
-    bytes32 public synthCurrencyKey = "sETH";
+    bytes32 public synthCurrencyKey;
 
     // ========== ADDRESS RESOLVER CONFIGURATION ==========
     bytes32 private constant CONTRACT_SYNTHETIX = "Synthetix";
@@ -28,21 +30,13 @@ contract Synthetix {
     bytes32 private constant CONTRACT_SYNTHSLINK = "ProxyERC20sLINK";
     bytes32 internal contractSynth = "ProxyERC20sETH";
 
-    function _initializeSynthetix(bytes32 _synth) internal {
-        synthCurrencyKey = _synth;
-        if (_synth == "sETH") {
-            contractSynth = CONTRACT_SYNTHSETH;
-        } else if (_synth == "sBTC") {
-            contractSynth = CONTRACT_SYNTHSBTC;
-        } else if (_synth == "sEUR") {
-            contractSynth = CONTRACT_SYNTHSEUR;
-        } else if (_synth == "sLINK") {
-            contractSynth = CONTRACT_SYNTHSLINK;
-        }
-    }
-
     IReadProxy public constant readProxy =
         IReadProxy(0x4E3b31eB0E5CB73641EE1E65E7dCEFe520bA3ef2);
+
+    function _initializeSynthetix(bytes32 _synth) internal {
+        // sETH / sBTC / sEUR / sLINK
+        synthCurrencyKey = _synth;
+    }
 
     function _balanceOfSynth() internal view returns (uint256) {
         return IERC20(address(_synthCoin())).balanceOf(address(this));
@@ -52,12 +46,60 @@ contract Synthetix {
         return IERC20(address(_synthsUSD())).balanceOf(address(this));
     }
 
-    function _synthToSUSD(uint256 _amount) internal view returns (uint256) {
-        return _exchangeRates().effectiveValue(synthCurrencyKey, _amount, sUSD);
+    function _synthToSUSD(uint256 _amountToSend)
+        internal
+        view
+        returns (uint256 amountReceived)
+    {
+        (amountReceived, , ) = _exchanger().getAmountsForExchange(
+            _amountToSend,
+            synthCurrencyKey,
+            sUSD
+        );
     }
 
-    function _sUSDToSynth(uint256 _amount) internal view returns (uint256) {
-        return _exchangeRates().effectiveValue(sUSD, _amount, synthCurrencyKey);
+    function _sUSDToSynth(uint256 _amountToSend)
+        internal
+        view
+        returns (uint256 amountReceived)
+    {
+        (amountReceived, , ) = _exchanger().getAmountsForExchange(
+            _amountToSend,
+            sUSD,
+            synthCurrencyKey
+        );
+    }
+
+    function _sUSDFromSynth(uint256 _amountToReceive)
+        internal
+        view
+        returns (uint256 amountToSend)
+    {
+        // NOTE: the fee of the trade that would be done (sUSD => synth) in this case
+        uint256 feeRate =
+            _exchanger().feeRateForExchange(sUSD, synthCurrencyKey); // in base 1e18
+        // formula => amountToReceive (Synth) * price (sUSD/Synth) / (1 - feeRate)
+        return
+            _exchangeRates()
+                .effectiveValue(synthCurrencyKey, _amountToReceive, sUSD)
+                .mul(1e18)
+                .div(uint256(1e18).sub(feeRate));
+    }
+
+    function _synthFromSUSD(uint256 _amountToReceive)
+        internal
+        view
+        returns (uint256 amountToSend)
+    {
+        // NOTE: the fee of the trade that would be done (synth => sUSD) in this case
+        uint256 feeRate =
+            _exchanger().feeRateForExchange(synthCurrencyKey, sUSD); // in base 1e18
+        // formula => amountToReceive (sUSD) * price (Synth/sUSD) / (1 - feeRate)
+        return
+            _exchangeRates()
+                .effectiveValue(sUSD, _amountToReceive, synthCurrencyKey)
+                .mul(1e18)
+                .div(uint256(1e18).sub(feeRate));
     }
 
     function exchangeSynthToSUSD() internal returns (uint256) {
@@ -71,27 +113,25 @@ contract Synthetix {
         return _synthetix().exchange(synthCurrencyKey, synthBalance, sUSD);
     }
 
-    function exchangeSUSDToSynth() internal returns (uint256) {
-        // swap full balance of sUSD to synth
-        uint256 synthBalance = _balanceOfSUSD();
-
-        if (synthBalance == 0) {
+    function exchangeSUSDToSynth(uint256 amount) internal returns (uint256) {
+        // swap amount of sUSD for Synth
+        if (amount == 0) {
             return 0;
         }
 
-        return _synthetix().exchange(sUSD, synthBalance, synthCurrencyKey);
-    }
-
-    function _synthCoin() internal view returns (ISynth) {
-        return ISynth(resolver().getAddress(contractSynth));
-    }
-
-    function _synthsUSD() internal view returns (ISynth) {
-        return ISynth(resolver().getAddress(CONTRACT_SYNTHSUSD));
+        return _synthetix().exchange(sUSD, amount, synthCurrencyKey);
     }
 
     function resolver() internal view returns (IAddressResolver) {
         return IAddressResolver(readProxy.target());
+    }
+
+    function _synthCoin() internal view returns (ISynth) {
+        return ISynth(resolver().getSynth(synthCurrencyKey));
+    }
+
+    function _synthsUSD() internal view returns (ISynth) {
+        return ISynth(resolver().getAddress(CONTRACT_SYNTHSUSD));
     }
 
     function _synthetix() internal view returns (ISynthetix) {
