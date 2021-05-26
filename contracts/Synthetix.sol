@@ -28,7 +28,18 @@ contract Synthetix {
     bytes32 private constant CONTRACT_SYNTHSLINK = "ProxyERC20sLINK";
     bytes32 internal contractSynth = "ProxyERC20sETH";
 
-    function _initializeSynthetix(bytes32 synth) internal {}
+    function _initializeSynthetix(bytes32 _synth) internal {
+        synthCurrencyKey = _synth;
+        if (_synth == "sETH") {
+            contractSynth = CONTRACT_SYNTHSETH;
+        } else if (_synth == "sBTC") {
+            contractSynth = CONTRACT_SYNTHSBTC;
+        } else if (_synth == "sEUR") {
+            contractSynth = CONTRACT_SYNTHSEUR;
+        } else if (_synth == "sLINK") {
+            contractSynth = CONTRACT_SYNTHSLINK;
+        }
+    }
 
     IReadProxy public constant readProxy =
         IReadProxy(0x4E3b31eB0E5CB73641EE1E65E7dCEFe520bA3ef2);
