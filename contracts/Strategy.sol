@@ -60,8 +60,6 @@ contract Strategy is BaseStrategy, Synthetix {
 
     constructor(
         address _vault,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
@@ -69,80 +67,77 @@ contract Strategy is BaseStrategy, Synthetix {
         uint256 _poolSize,
         bool _hasUnderlying,
         bytes32 _synth
-    ) public BaseStrategy(_vault) Synthetix(_synth) {
+    ) public BaseStrategy(_vault) {
         _initializeStrat(
-            _maxSingleInvest,
-            _minTimePerInvest,
             _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
             _poolSize,
-            _hasUnderlying
+            _hasUnderlying,
+            _synth
         );
     }
 
     function initialize(
         address _vault,
-        address _strategist,
-        address _rewards,
-        address _keeper,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) external {
         //note: initialise can only be called once. in _initialize in BaseStrategy we have: require(address(want) == address(0), "Strategy already initialized");
-        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initialize(_vault, msg.sender, msg.sender, msg.sender);
         _initializeStrat(
-            _maxSingleInvest,
-            _minTimePerInvest,
             _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
             _poolSize,
-            _hasUnderlying
+            _hasUnderlying,
+            _synth
         );
     }
 
     function _initializeStrat(
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) internal {
         require(synth_decimals == 0, "Already Initialized");
         require(_poolSize > 1 && _poolSize < 5, "incorrect pool size");
-
+        _initializeSynthetix(_synth);
         curvePool = ICurveFi(_curvePool);
 
         if (
             curvePool.coins(0) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(0) == address(want))
+            (_hasUnderlying &&
+                curvePool.underlying_coins(0) == address(_synthCoin()))
         ) {
             curveId = 0;
         } else if (
             curvePool.coins(1) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(1) == address(want))
+            (_hasUnderlying &&
+                curvePool.underlying_coins(1) == address(_synthCoin()))
         ) {
             curveId = 1;
         } else if (
             curvePool.coins(2) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(2) == address(want))
+            (_hasUnderlying &&
+                curvePool.underlying_coins(2) == address(_synthCoin()))
         ) {
             curveId = 2;
         } else if (
             curvePool.coins(3) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(3) == address(want))
+            (_hasUnderlying &&
+                curvePool.underlying_coins(3) == address(_synthCoin()))
         ) {
             //will revert if there are not enough coins
             curveId = 3;
@@ -150,13 +145,8 @@ contract Strategy is BaseStrategy, Synthetix {
             require(false, "incorrect want for curve pool");
         }
 
-        /*if(_hasUnderlying){
-            middleToken = IERC20Extended(curvePool.coins(uint256(curveId)));
-            middle_decimals = middleToken.decimals();
-        }*/
-
-        maxSingleInvest = _maxSingleInvest;
-        minTimePerInvest = _minTimePerInvest;
+        maxSingleInvest = type(uint256).max; // save on stack
+        // minTimePerInvest = _minTimePerInvest; // save on stack
         slippageProtectionIn = _slippageProtectionIn;
         slippageProtectionOut = _slippageProtectionIn; // use In to start with to save on stack
 
@@ -175,7 +165,7 @@ contract Strategy is BaseStrategy, Synthetix {
         minReportDelay = 3600;
         debtThreshold = 100 * 1e18;
         withdrawProtection = true;
-        synth_decimals = IERC20Extended(address(_synth())).decimals();
+        synth_decimals = IERC20Extended(address(_synthCoin())).decimals();
 
         want.safeApprove(address(curvePool), uint256(-1));
         curveToken.approve(address(yvToken), uint256(-1));
@@ -185,9 +175,6 @@ contract Strategy is BaseStrategy, Synthetix {
 
     function cloneSingleSidedCurve(
         address _vault,
-        address _strategist,
-        address _rewards,
-        address _keeper,
         uint256 _maxSingleInvest,
         uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
@@ -195,7 +182,8 @@ contract Strategy is BaseStrategy, Synthetix {
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) external returns (address newStrategy) {
         bytes20 addressBytes = bytes20(address(this));
 
@@ -213,20 +201,15 @@ contract Strategy is BaseStrategy, Synthetix {
             )
             newStrategy := create(0, clone_code, 0x37)
         }
-
         Strategy(newStrategy).initialize(
             _vault,
-            _strategist,
-            _rewards,
-            _keeper,
-            _maxSingleInvest,
-            _minTimePerInvest,
             _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
             _poolSize,
-            _hasUnderlying
+            _hasUnderlying,
+            _synth
         );
 
         emit Cloned(newStrategy);
@@ -237,35 +220,35 @@ contract Strategy is BaseStrategy, Synthetix {
             string(
                 abi.encodePacked(
                     "SingleSidedCrvSynth",
-                    IERC20Extended(address(_synth())).symbol()
+                    IERC20Extended(address(_synthCoin())).symbol()
                 )
             );
     }
 
     function updateMinTimePerInvest(uint256 _minTimePerInvest)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         minTimePerInvest = _minTimePerInvest;
     }
 
     function updateMaxSingleInvest(uint256 _maxSingleInvest)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         maxSingleInvest = _maxSingleInvest;
     }
 
     function updateSlippageProtectionIn(uint256 _slippageProtectionIn)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         slippageProtectionIn = _slippageProtectionIn;
     }
 
     function updateSlippageProtectionOut(uint256 _slippageProtectionOut)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         slippageProtectionOut = _slippageProtectionOut;
     }
