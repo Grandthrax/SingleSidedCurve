@@ -6,6 +6,18 @@ pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IVaultV2 is IERC20 {
+    struct StrategyParams {
+        uint256 performanceFee;
+        uint256 activation;
+        uint256 debtRatio;
+        uint256 minDebtPerHarvest;
+        uint256 maxDebtPerHarvest;
+        uint256 lastReport;
+        uint256 totalDebt;
+        uint256 totalGain;
+        uint256 totalLoss;
+    }
+
     function addStrategy(
         address,
         uint256,
@@ -42,6 +54,12 @@ interface IVaultV2 is IERC20 {
     function withdraw() external returns (uint256);
 
     function withdraw(uint256 maxShares) external returns (uint256);
+
+    function withdraw(
+        uint256 maxShares,
+        address receiver,
+        uint256 maxloss
+    ) external returns (uint256);
 
     function setManagementFee(uint256) external;
 
@@ -135,16 +153,4 @@ interface IVaultV2 is IERC20 {
     function guardian() external view returns (address);
 
     function setDepositLimit(uint256) external;
-}
-
-struct StrategyParams {
-    uint256 performanceFee;
-    uint256 activation;
-    uint256 debtRatio;
-    uint256 minDebtPerHarvest;
-    uint256 maxDebtPerHarvest;
-    uint256 lastReport;
-    uint256 totalDebt;
-    uint256 totalGain;
-    uint256 totalLoss;
 }
