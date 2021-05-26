@@ -19,16 +19,14 @@ contract Synthetix {
     bytes32 public constant sUSD = "sUSD";
     bytes32 public synthCurrencyKey;
 
+    bytes32 internal constant TRACKING_CODE =
+        "0x594541524e000000000000000000000000000000000000000000000000000000";
+
     // ========== ADDRESS RESOLVER CONFIGURATION ==========
     bytes32 private constant CONTRACT_SYNTHETIX = "Synthetix";
     bytes32 private constant CONTRACT_EXCHANGER = "Exchanger";
     bytes32 private constant CONTRACT_EXCHANGERATES = "ExchangeRates";
     bytes32 private constant CONTRACT_SYNTHSUSD = "ProxyERC20sUSD";
-    bytes32 private constant CONTRACT_SYNTHSETH = "ProxyERC20sETH";
-    bytes32 private constant CONTRACT_SYNTHSEUR = "ProxyERC20sEUR";
-    bytes32 private constant CONTRACT_SYNTHSBTC = "ProxyERC20sBTC";
-    bytes32 private constant CONTRACT_SYNTHSLINK = "ProxyERC20sLINK";
-    bytes32 internal contractSynth = "ProxyERC20sETH";
 
     IReadProxy public constant readProxy =
         IReadProxy(0x4E3b31eB0E5CB73641EE1E65E7dCEFe520bA3ef2);
@@ -110,7 +108,14 @@ contract Synthetix {
             return 0;
         }
 
-        return _synthetix().exchange(synthCurrencyKey, synthBalance, sUSD);
+        return
+            _synthetix().exchangeWithTracking(
+                synthCurrencyKey,
+                synthBalance,
+                sUSD,
+                address(this),
+                TRACKING_CODE
+            );
     }
 
     function exchangeSUSDToSynth(uint256 amount) internal returns (uint256) {
@@ -119,7 +124,14 @@ contract Synthetix {
             return 0;
         }
 
-        return _synthetix().exchange(sUSD, amount, synthCurrencyKey);
+        return
+            _synthetix().exchangeWithTracking(
+                sUSD,
+                amount,
+                synthCurrencyKey,
+                address(this),
+                TRACKING_CODE
+            );
     }
 
     function resolver() internal view returns (IAddressResolver) {

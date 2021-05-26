@@ -42,13 +42,13 @@ contract Strategy is BaseStrategy, Synthetix {
     IVaultV2 public yvToken; // = IVaultV1(address(0x46AFc2dfBd1ea0c0760CAD8262A5838e803A37e5));
     //IERC20Extended public middleToken; // the token between bluechip and curve pool
 
-    uint256 public lastInvest = 0;
+    uint256 public lastInvest;
     uint256 public minTimePerInvest; // = 3600;
     uint256 public maxSingleInvest; // // 2 hbtc per hour default
     uint256 public slippageProtectionIn; // = 50; //out of 10000. 50 = 0.5%
     uint256 public slippageProtectionOut; // = 50; //out of 10000. 50 = 0.5%
     uint256 public constant DENOMINATOR = 10_000;
-    uint256 public maxLoss = 1; // maximum loss allowed from yVault withdrawal
+    uint256 public maxLoss; // maximum loss allowed from yVault withdrawal default value: 1 (in BPS)
     uint8 private synth_decimals;
     // uint8 private middle_decimals; // TODO: remove
 
@@ -255,6 +255,10 @@ contract Strategy is BaseStrategy, Synthetix {
         slippageProtectionOut = _slippageProtectionOut;
     }
 
+    function updateMaxLoss(uint256 _maxLoss) public onlyAuthorized {
+        maxLoss = _maxLoss;
+    }
+
     function delegatedAssets() public view override returns (uint256) {
         return
             Math.min(
@@ -398,11 +402,11 @@ contract Strategy is BaseStrategy, Synthetix {
         uint256 _sUSDToInvest =
             Math.min(_balanceOfSUSD(), _sUSDFromSynth(maxSingleInvest));
 
-        uint256 _synthToInvest = exchangeSUSDToSynth(_sUSDToInvest);
-
-        if (_synthToInvest == 0) {
+        if (_sUSDToInvest == 0) {
             return;
         }
+
+        uint256 _synthToInvest = exchangeSUSDToSynth(_sUSDToInvest);
 
         // 2. Supply liquidity (single sided) to Curve Pool
         // calculate LP tokens that we will receive
@@ -486,9 +490,7 @@ contract Strategy is BaseStrategy, Synthetix {
         // Calculate how many shares we need to burn to get the amount of LP tokens that we want
         uint256 pricePerFullShare = yvToken.pricePerShare();
         uint256 amountFromVault =
-            pricePerFullShare > 0
-                ? amountWeNeedFromVirtualPrice.mul(1e18).div(pricePerFullShare)
-                : type(uint256).max;
+            amountWeNeedFromVirtualPrice.mul(1e18).div(pricePerFullShare);
 
         // cap to our yShares balance
         uint256 yBalance = yvToken.balanceOf(address(this));
@@ -502,7 +504,6 @@ contract Strategy is BaseStrategy, Synthetix {
         }
 
         // Added explicit maxLoss protection in case something goes wrong
-        // TODO: add maxLoss as state var
         yvToken.withdraw(amountFromVault, address(this), maxLoss);
 
         if (withdrawProtection) {
