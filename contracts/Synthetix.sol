@@ -15,19 +15,20 @@ import "./Interfaces/synthetix/IAddressResolver.sol";
 contract Synthetix {
     // ========== SYNTHETIX CONFIGURATION ==========
     bytes32 public constant sUSD = "sUSD";
-    bytes32 public synthCurrencyKey;
+    bytes32 public synthCurrencyKey = "sETH";
 
     // ========== ADDRESS RESOLVER CONFIGURATION ==========
     bytes32 private constant CONTRACT_SYNTHETIX = "Synthetix";
     bytes32 private constant CONTRACT_EXCHANGER = "Exchanger";
     bytes32 private constant CONTRACT_EXCHANGERATES = "ExchangeRates";
     bytes32 private constant CONTRACT_SYNTHSUSD = "ProxyERC20sUSD";
-    bytes32 private constant CONTRACT__SYNTHSETH = "ProxyERC20sETH";
-    bytes32 private constant CONTRACT__SYNTHSEUR = "ProxyERC20sEUR";
-    bytes32 private constant CONTRACT__SYNTHSBTC = "ProxyERC20sBTC";
-    bytes32 private constant CONTRACT__SYNTHSLINK = "ProxyERC20sLINK";
+    bytes32 private constant CONTRACT_SYNTHSETH = "ProxyERC20sETH";
+    bytes32 private constant CONTRACT_SYNTHSEUR = "ProxyERC20sEUR";
+    bytes32 private constant CONTRACT_SYNTHSBTC = "ProxyERC20sBTC";
+    bytes32 private constant CONTRACT_SYNTHSLINK = "ProxyERC20sLINK";
+    bytes32 internal contractSynth = "ProxyERC20sETH";
 
-    function _initializeSynthetix(bytes32 _synth) internal {}
+    function _initializeSynthetix(bytes32 synth) internal {}
 
     IReadProxy public constant readProxy =
         IReadProxy(0x4E3b31eB0E5CB73641EE1E65E7dCEFe520bA3ef2);
