@@ -60,7 +60,6 @@ contract Strategy is BaseStrategy, Synthetix {
 
     constructor(
         address _vault,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
@@ -68,8 +67,8 @@ contract Strategy is BaseStrategy, Synthetix {
         bool _hasUnderlying,
         bytes32 _synth
     ) public BaseStrategy(_vault) {
+        _initializeSynthetix(_synth);
         _initializeStrat(
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
@@ -81,7 +80,6 @@ contract Strategy is BaseStrategy, Synthetix {
 
     function initialize(
         address _vault,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
@@ -93,7 +91,6 @@ contract Strategy is BaseStrategy, Synthetix {
         _initialize(_vault, msg.sender, msg.sender, msg.sender);
         _initializeSynthetix(_synth);
         _initializeStrat(
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
@@ -104,7 +101,6 @@ contract Strategy is BaseStrategy, Synthetix {
     }
 
     function _initializeStrat(
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
@@ -114,29 +110,28 @@ contract Strategy is BaseStrategy, Synthetix {
     ) internal {
         require(synth_decimals == 0, "Already Initialized");
         require(_poolSize > 1 && _poolSize < 5, "incorrect pool size");
-
         curvePool = ICurveFi(_curvePool);
-
+        
         if (
-            curvePool.coins(0) == address(want) ||
+            curvePool.coins(0) == address(_synthCoin()) ||
             (_hasUnderlying &&
                 curvePool.underlying_coins(0) == address(_synthCoin()))
         ) {
             curveId = 0;
         } else if (
-            curvePool.coins(1) == address(want) ||
+            curvePool.coins(1) == address(_synthCoin()) ||
             (_hasUnderlying &&
                 curvePool.underlying_coins(1) == address(_synthCoin()))
         ) {
             curveId = 1;
         } else if (
-            curvePool.coins(2) == address(want) ||
+            curvePool.coins(2) == address(_synthCoin()) ||
             (_hasUnderlying &&
                 curvePool.underlying_coins(2) == address(_synthCoin()))
         ) {
             curveId = 2;
         } else if (
-            curvePool.coins(3) == address(want) ||
+            curvePool.coins(3) == address(_synthCoin()) ||
             (_hasUnderlying &&
                 curvePool.underlying_coins(3) == address(_synthCoin()))
         ) {
@@ -148,8 +143,8 @@ contract Strategy is BaseStrategy, Synthetix {
 
         maxSingleInvest = type(uint256).max; // save on stack
         // minTimePerInvest = _minTimePerInvest; // save on stack
-        slippageProtectionIn = _slippageProtectionIn;
-        slippageProtectionOut = _slippageProtectionIn; // use In to start with to save on stack
+        slippageProtectionIn = 50; // default to save on stack
+        slippageProtectionOut = 50; // default to save on stack
 
         poolSize = _poolSize;
         hasUnderlying = _hasUnderlying;
@@ -168,7 +163,6 @@ contract Strategy is BaseStrategy, Synthetix {
         withdrawProtection = true;
         maxLoss = 1;
         synth_decimals = IERC20Extended(address(_synthCoin())).decimals();
-
         want.safeApprove(address(curvePool), uint256(-1));
         curveToken.approve(address(yvToken), uint256(-1));
     }
@@ -177,9 +171,6 @@ contract Strategy is BaseStrategy, Synthetix {
 
     function cloneSingleSidedCurve(
         address _vault,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
@@ -205,7 +196,6 @@ contract Strategy is BaseStrategy, Synthetix {
         }
         Strategy(newStrategy).initialize(
             _vault,
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,

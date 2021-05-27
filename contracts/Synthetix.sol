@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.6.12;
-pragma experimental ;
+pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -20,21 +20,25 @@ contract Synthetix {
     bytes32 public synthCurrencyKey;
 
     bytes32 internal constant TRACKING_CODE =
-        "0x594541524e000000000000000000000000000000000000000000000000000000";
+        0x594541524e000000000000000000000000000000000000000000000000000000;
 
     // ========== ADDRESS RESOLVER CONFIGURATION ==========
     bytes32 private constant CONTRACT_SYNTHETIX = "Synthetix";
     bytes32 private constant CONTRACT_EXCHANGER = "Exchanger";
     bytes32 private constant CONTRACT_EXCHANGERATES = "ExchangeRates";
     bytes32 private constant CONTRACT_SYNTHSUSD = "ProxyERC20sUSD";
+    bytes32 private contractSynth;
 
     IReadProxy public constant readProxy =
         IReadProxy(0x4E3b31eB0E5CB73641EE1E65E7dCEFe520bA3ef2);
 
     function _initializeSynthetix(bytes32 _synth) internal {
         // sETH / sBTC / sEUR / sLINK
-        synthCurrencyKey = _synth;
+        contractSynth = _synth;
+        synthCurrencyKey = ISynth(IReadProxy(address(resolver().getAddress(_synth))).target()).currencyKey();
+        emit Synths(address(_synthCoin()), synthCurrencyKey, _synth);
     }
+    event Synths(address coin, bytes32 key, bytes32 cont);
 
     function _balanceOfSynth() internal view returns (uint256) {
         return IERC20(address(_synthCoin())).balanceOf(address(this));
@@ -49,6 +53,9 @@ contract Synthetix {
         view
         returns (uint256 amountReceived)
     {
+        if(_amountToSend == 0 || _amountToSend == type(uint256).max) {
+            return _amountToSend;
+        }
         (amountReceived, , ) = _exchanger().getAmountsForExchange(
             _amountToSend,
             synthCurrencyKey,
@@ -61,6 +68,9 @@ contract Synthetix {
         view
         returns (uint256 amountReceived)
     {
+        if(_amountToSend == 0 || _amountToSend == type(uint256).max) {
+            return _amountToSend;
+        }
         (amountReceived, , ) = _exchanger().getAmountsForExchange(
             _amountToSend,
             sUSD,
@@ -73,6 +83,9 @@ contract Synthetix {
         view
         returns (uint256 amountToSend)
     {
+        if(_amountToReceive == 0 || _amountToReceive == type(uint256).max) {
+            return _amountToReceive;
+        }
         // NOTE: the fee of the trade that would be done (sUSD => synth) in this case
         uint256 feeRate =
             _exchanger().feeRateForExchange(sUSD, synthCurrencyKey); // in base 1e18
@@ -89,6 +102,9 @@ contract Synthetix {
         view
         returns (uint256 amountToSend)
     {
+        if(_amountToReceive == 0 || _amountToReceive == type(uint256).max) {
+            return _amountToReceive;
+        }
         // NOTE: the fee of the trade that would be done (synth => sUSD) in this case
         uint256 feeRate =
             _exchanger().feeRateForExchange(synthCurrencyKey, sUSD); // in base 1e18
@@ -139,7 +155,7 @@ contract Synthetix {
     }
 
     function _synthCoin() internal view returns (ISynth) {
-        return ISynth(resolver().getSynth(synthCurrencyKey));
+        return ISynth(resolver().getAddress(contractSynth));
     }
 
     function _synthsUSD() internal view returns (ISynth) {
