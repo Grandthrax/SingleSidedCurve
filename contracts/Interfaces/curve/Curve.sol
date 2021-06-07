@@ -3,6 +3,14 @@
 pragma solidity 0.6.12;
 
 interface ICurveFi {
+    // function coins(int128) external returns (address);
+
+    // function underlying_coins(int128) external returns (address);
+
+    function coins(uint256) external returns (address);
+
+    function underlying_coins(uint256) external returns (address);
+
     function get_virtual_price() external view returns (uint256);
 
     function add_liquidity(
@@ -43,10 +51,6 @@ interface ICurveFi {
         uint256 min_mint_amount,
         bool use_underlying
     ) external payable;
-
-    function coins(uint256) external returns (address);
-
-    function underlying_coins(uint256) external returns (address);
 
     function remove_liquidity_imbalance(
         uint256[2] calldata amounts,

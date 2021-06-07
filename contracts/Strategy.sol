@@ -2,14 +2,16 @@
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-import "./interfaces/curve/Curve.sol";
-import "./interfaces/curve/ICrvV3.sol";
-import "./interfaces/erc20/IERC20Extended.sol";
+import "./Interfaces/curve/Curve.sol";
+import "./Interfaces/curve/ICrvV3.sol";
+import "./Interfaces/erc20/IERC20Extended.sol";
+import "./Interfaces/Yearn/IVaultV2.sol";
+
+import "./Synthetix.sol";
 
 // These are the core Yearn libraries
 import "@yearnvaults/contracts/BaseStrategy.sol";
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
@@ -22,34 +24,32 @@ interface IUni {
         returns (uint256[] memory amounts);
 }
 
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "../interfaces/<protocol>/<Interface>.sol";
-
-contract Strategy is BaseStrategy {
+contract Strategy is BaseStrategy, Synthetix {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
-    ICurveFi public curvePool; // =  ICurveFi(address(0x4CA9b3063Ec5866A4B82E437059D2C43d1be596F));
-    ICrvV3 public curveToken; // = ICrvV3(address(0xb19059ebb43466C323583928285a49f558E572Fd));
+    ICurveFi public curvePool;
+    ICrvV3 public curveToken;
 
-    address public constant weth =
-        address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    uint256 public susdBuffer; // 10% (over 10_000 BPS) amount of sUSD that should not be exchanged for sETH
+
+    address public constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant uniswapRouter =
-        address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
-    VaultAPI public yvToken; // = IVaultV1(address(0x46AFc2dfBd1ea0c0760CAD8262A5838e803A37e5));
-    //IERC20Extended public middleToken; // the token between bluechip and curve pool
+    IVaultV2 public yvToken;
 
-    uint256 public lastInvest = 0;
+    uint256 public lastInvest;
     uint256 public minTimePerInvest; // = 3600;
     uint256 public maxSingleInvest; // // 2 hbtc per hour default
     uint256 public slippageProtectionIn; // = 50; //out of 10000. 50 = 0.5%
     uint256 public slippageProtectionOut; // = 50; //out of 10000. 50 = 0.5%
-    uint256 public constant DENOMINATOR = 10000;
+    uint256 public constant DENOMINATOR = 10_000;
+    uint256 public maxLoss; // maximum loss allowed from yVault withdrawal default value: 1 (in BPS)
+    uint8 private synth_decimals;
 
-    uint8 private want_decimals;
-    uint8 private middle_decimals;
+    uint256 internal constant DUST_THRESHOLD = 10_000;
 
     int128 public curveId;
     uint256 public poolSize;
@@ -59,19 +59,15 @@ contract Strategy is BaseStrategy {
 
     constructor(
         address _vault,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) public BaseStrategy(_vault) {
+        _initializeSynthetix(_synth);
         _initializeStrat(
-            _maxSingleInvest,
-            _minTimePerInvest,
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
@@ -82,24 +78,17 @@ contract Strategy is BaseStrategy {
 
     function initialize(
         address _vault,
-        address _strategist,
-        address _rewards,
-        address _keeper,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) external {
         //note: initialise can only be called once. in _initialize in BaseStrategy we have: require(address(want) == address(0), "Strategy already initialized");
-        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initialize(_vault, msg.sender, msg.sender, msg.sender);
+        _initializeSynthetix(_synth);
         _initializeStrat(
-            _maxSingleInvest,
-            _minTimePerInvest,
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
@@ -109,38 +98,43 @@ contract Strategy is BaseStrategy {
     }
 
     function _initializeStrat(
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
         bool _hasUnderlying
     ) internal {
-        require(want_decimals == 0, "Already Initialized");
+        require(
+            address(curvePool) == address(curvePool),
+            "Already Initialized"
+        );
         require(_poolSize > 1 && _poolSize < 5, "incorrect pool size");
+        require(address(want) == address(_synthsUSD()), "want must be sUSD");
 
         curvePool = ICurveFi(_curvePool);
 
         if (
-            curvePool.coins(0) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(0) == address(want))
+            curvePool.coins(0) == address(_synthCoin()) ||
+            (_hasUnderlying &&
+                curvePool.underlying_coins(0) == address(_synthCoin()))
         ) {
             curveId = 0;
         } else if (
-            curvePool.coins(1) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(1) == address(want))
+            curvePool.coins(1) == address(_synthCoin()) ||
+            (_hasUnderlying &&
+                curvePool.underlying_coins(1) == address(_synthCoin()))
         ) {
             curveId = 1;
         } else if (
-            curvePool.coins(2) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(2) == address(want))
+            curvePool.coins(2) == address(_synthCoin()) ||
+            (_hasUnderlying &&
+                curvePool.underlying_coins(2) == address(_synthCoin()))
         ) {
             curveId = 2;
         } else if (
-            curvePool.coins(3) == address(want) ||
-            (_hasUnderlying && curvePool.underlying_coins(3) == address(want))
+            curvePool.coins(3) == address(_synthCoin()) ||
+            (_hasUnderlying &&
+                curvePool.underlying_coins(3) == address(_synthCoin()))
         ) {
             //will revert if there are not enough coins
             curveId = 3;
@@ -148,20 +142,15 @@ contract Strategy is BaseStrategy {
             require(false, "incorrect want for curve pool");
         }
 
-        /*if(_hasUnderlying){
-            middleToken = IERC20Extended(curvePool.coins(uint256(curveId)));
-            middle_decimals = middleToken.decimals();
-        }*/
-
-        maxSingleInvest = _maxSingleInvest;
-        minTimePerInvest = _minTimePerInvest;
-        slippageProtectionIn = _slippageProtectionIn;
-        slippageProtectionOut = _slippageProtectionIn; // use In to start with to save on stack
+        maxSingleInvest = type(uint256).max; // save on stack
+        // minTimePerInvest = _minTimePerInvest; // save on stack
+        slippageProtectionIn = 50; // default to save on stack
+        slippageProtectionOut = 50; // default to save on stack
 
         poolSize = _poolSize;
         hasUnderlying = _hasUnderlying;
 
-        yvToken = VaultAPI(_yvToken);
+        yvToken = IVaultV2(_yvToken);
         curveToken = ICrvV3(_curveToken);
 
         _setupStatics();
@@ -173,27 +162,23 @@ contract Strategy is BaseStrategy {
         minReportDelay = 3600;
         debtThreshold = 100 * 1e18;
         withdrawProtection = true;
-        want_decimals = IERC20Extended(address(want)).decimals();
-
-        want.safeApprove(address(curvePool), uint256(-1));
-        curveToken.approve(address(yvToken), uint256(-1));
+        maxLoss = 1;
+        susdBuffer = 1_000; // 10% over 10_000 BIPS
+        synth_decimals = IERC20Extended(address(_synthCoin())).decimals();
+        want.safeApprove(address(curvePool), type(uint256).max);
+        curveToken.approve(address(yvToken), type(uint256).max);
     }
 
     event Cloned(address indexed clone);
 
     function cloneSingleSidedCurve(
         address _vault,
-        address _strategist,
-        address _rewards,
-        address _keeper,
-        uint256 _maxSingleInvest,
-        uint256 _minTimePerInvest,
-        uint256 _slippageProtectionIn,
         address _curvePool,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
-        bool _hasUnderlying
+        bool _hasUnderlying,
+        bytes32 _synth
     ) external returns (address newStrategy) {
         bytes20 addressBytes = bytes20(address(this));
 
@@ -211,20 +196,14 @@ contract Strategy is BaseStrategy {
             )
             newStrategy := create(0, clone_code, 0x37)
         }
-
         Strategy(newStrategy).initialize(
             _vault,
-            _strategist,
-            _rewards,
-            _keeper,
-            _maxSingleInvest,
-            _minTimePerInvest,
-            _slippageProtectionIn,
             _curvePool,
             _curveToken,
             _yvToken,
             _poolSize,
-            _hasUnderlying
+            _hasUnderlying,
+            _synth
         );
 
         emit Cloned(newStrategy);
@@ -234,38 +213,56 @@ contract Strategy is BaseStrategy {
         return
             string(
                 abi.encodePacked(
-                    "SingleSidedCrv",
-                    IERC20Extended(address(want)).symbol()
+                    "SingleSidedCrvSynth",
+                    IERC20Extended(address(_synthCoin())).symbol()
                 )
             );
     }
 
     function updateMinTimePerInvest(uint256 _minTimePerInvest)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         minTimePerInvest = _minTimePerInvest;
     }
 
-    function updateMaxSingleInvest(uint256 _maxSingleInvest)
+    function updateSUSDBuffer(uint256 _susdBuffer) public onlyAuthorized {
+        // IN BIPS
+        require(_susdBuffer <= 10_000, "!too high");
+        susdBuffer = _susdBuffer;
+    }
+
+    function updatemaxSingleInvest(uint256 _maxSingleInvest)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         maxSingleInvest = _maxSingleInvest;
     }
 
     function updateSlippageProtectionIn(uint256 _slippageProtectionIn)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         slippageProtectionIn = _slippageProtectionIn;
     }
 
     function updateSlippageProtectionOut(uint256 _slippageProtectionOut)
         public
-        onlyGovernance
+        onlyAuthorized
     {
         slippageProtectionOut = _slippageProtectionOut;
+    }
+
+    function updateWithdrawProtection(bool _withdrawProtection)
+        external
+        onlyAuthorized
+    {
+        withdrawProtection = _withdrawProtection;
+    }
+
+    function updateMaxLoss(uint256 _maxLoss) public onlyAuthorized {
+        require(_maxLoss <= 10_000);
+        maxLoss = _maxLoss;
     }
 
     function delegatedAssets() public view override returns (uint256) {
@@ -277,10 +274,13 @@ contract Strategy is BaseStrategy {
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 totalCurveTokens =
-            curveTokensInYVault().add(curveToken.balanceOf(address(this)));
+        uint256 totalCurveTokens = curveTokensInYVault().add(
+            curveToken.balanceOf(address(this))
+        );
+        // NOTE: want is always sUSD so we directly use _balanceOfSUSD
+        // NOTE: _synthToSUSD takes into account future fees in which the strategy will incur for exchanging synth for sUSD
         return
-            want.balanceOf(address(this)).add(
+            _balanceOfSUSD().add(_synthToSUSD(_balanceOfSynth())).add(
                 curveTokenToWant(totalCurveTokens)
             );
     }
@@ -293,39 +293,15 @@ contract Strategy is BaseStrategy {
 
         //we want to choose lower value of virtual price and amount we really get out
         //this means we will always underestimate current assets.
-        uint256 virtualOut = virtualPriceToWant().mul(tokens).div(1e18);
+        uint256 virtualOut = virtualPriceToSynth().mul(tokens).div(1e18);
 
-        /*uint256 realOut;
-        if(hasUnderlying){
-            realOut = curvePool.calc_withdraw_one_coin(tokens, curveId, true);
-        }else{
-            realOut = curvePool.calc_withdraw_one_coin(tokens, curveId);
-        }*/
-
-        //return Math.min(virtualOut, realOut);
-        return virtualOut;
+        return _synthToSUSD(virtualOut);
     }
 
     //we lose some precision here. but it shouldnt matter as we are underestimating
-    function virtualPriceToWant() public view returns (uint256) {
-        if (want_decimals < 18) {
-            return
-                curvePool.get_virtual_price().div(
-                    10**(uint256(uint8(18) - want_decimals))
-                );
-        } else {
-            return curvePool.get_virtual_price();
-        }
+    function virtualPriceToSynth() public view returns (uint256) {
+        return curvePool.get_virtual_price();
     }
-
-    /*function virtualPriceToMiddle() public view returns (uint256) {
-        if(middle_decimals < 18){
-            return curvePool.get_virtual_price().div(10 ** (uint256(uint8(18) - middle_decimals)));
-        }else{
-            return curvePool.get_virtual_price();
-        }
-
-    }*/
 
     function curveTokensInYVault() public view returns (uint256) {
         uint256 balance = yvToken.balanceOf(address(this));
@@ -352,21 +328,27 @@ contract Strategy is BaseStrategy {
 
         uint256 debt = vault.strategies(address(this)).totalDebt;
         uint256 currentValue = estimatedTotalAssets();
-        uint256 wantBalance = want.balanceOf(address(this));
+        uint256 wantBalance = _balanceOfSUSD(); // want is always sUSD
 
+        // we check against estimatedTotalAssets
         if (debt < currentValue) {
             //profit
             _profit = currentValue.sub(debt);
+            // NOTE: the strategy will only be able to serve profit payment up to buffer amount
+            // we limit profit and try to delay its reporting until there is enough unlocked want to repay it to the vault
+            _profit = Math.min(wantBalance, _profit);
         } else {
             _loss = debt.sub(currentValue);
         }
 
         uint256 toFree = _debtPayment.add(_profit);
-
+        // if the strategy needs to exchange sETH into sUSD, the waiting period will kick in and the vault.report will revert !!!
+        // this only works if the strategy has been previously unwinded using BUFFER = 100% OR manual function
+        // otherwise, max amount "toFree" is wantBalance (which should be the buffer, which should be setted to be able to serve profit taking)
         if (toFree > wantBalance) {
             toFree = toFree.sub(wantBalance);
 
-            (, uint256 withdrawalLoss) = withdrawSome(toFree);
+            (, uint256 withdrawalLoss) = withdrawSomeWant(toFree);
 
             //when we withdraw we can lose money in the withdrawal
             if (withdrawalLoss < _profit) {
@@ -376,7 +358,7 @@ contract Strategy is BaseStrategy {
                 _profit = 0;
             }
 
-            wantBalance = want.balanceOf(address(this));
+            wantBalance = _balanceOfSUSD();
 
             if (wantBalance < _profit) {
                 _profit = wantBalance;
@@ -409,67 +391,12 @@ contract Strategy is BaseStrategy {
         path[0] = weth;
         path[1] = address(want);
 
-        uint256[] memory amounts =
-            IUni(uniswapRouter).getAmountsOut(_amount, path);
+        uint256[] memory amounts = IUni(uniswapRouter).getAmountsOut(
+            _amount,
+            path
+        );
 
         return amounts[amounts.length - 1];
-    }
-
-    function tendTrigger(uint256 callCost) public view override returns (bool) {
-        uint256 wantBal = want.balanceOf(address(this));
-        uint256 _wantToInvest = Math.min(wantBal, maxSingleInvest);
-
-        if (
-            lastInvest.add(minTimePerInvest) < block.timestamp &&
-            _wantToInvest > 1 &&
-            _checkSlip(_wantToInvest)
-        ) {
-            //return true;
-        }
-    }
-
-    function _checkSlip(uint256 _wantToInvest) public view returns (bool) {
-        return true;
-        /*
-        //convertToMiddle
-        if(hasUnderlying){
-            if(want_decimals > middle_decimals){
-                _wantToInvest = _wantToInvest.div(10 ** uint256(want_decimals - middle_decimals));
-
-            }else if (want_decimals < middle_decimals){
-                _wantToInvest = _wantToInvest.mul(10 ** uint256(middle_decimals - want_decimals));
-            }
-        }
-
-        uint256 vp = virtualPriceToWant();
-        uint256 expectedOut = _wantToInvest.mul(1e18).div(vp);
-
-        uint256 maxSlip = expectedOut.mul(DENOMINATOR.sub(slippageProtectionIn)).div(DENOMINATOR);
-
-        uint256 roughOut;
-
-        if(poolSize == 2){
-            uint256[2] memory amounts;
-            amounts[uint256(curveId)] = _wantToInvest;
-            //note doesnt take into account underlying
-            roughOut = curvePool.calc_token_amount(amounts, true);
-
-        }else if (poolSize == 3){
-            uint256[3] memory amounts;
-            amounts[uint256(curveId)] = _wantToInvest;
-            //note doesnt take into account underlying
-            roughOut = curvePool.calc_token_amount(amounts, true);
-
-        }else{
-            uint256[4] memory amounts;
-            amounts[uint256(curveId)] = _wantToInvest;
-            //note doesnt take into account underlying
-            roughOut = curvePool.calc_token_amount(amounts, true);
-        }
-
-        if(roughOut >= maxSlip){
-            return true;
-        }*/
     }
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
@@ -477,61 +404,129 @@ contract Strategy is BaseStrategy {
             return;
         }
 
-        // Invest the rest of the want
-        uint256 _wantToInvest =
-            Math.min(want.balanceOf(address(this)), maxSingleInvest);
+        // 1. Check if we can invest Synth
+        uint256 looseSynth = _balanceOfSynth();
+        uint256 _sUSDBalance = _balanceOfSUSD();
 
-        if (_wantToInvest > 0) {
-            //add to curve (single sided)
-            if (_checkSlip(_wantToInvest)) {
-                uint256 expectedOut =
-                    _wantToInvest.mul(1e18).div(virtualPriceToWant());
+        // we calculate how much we need to keep in buffer
+        // all the amount over it will be converted into Synth
+        uint256 totalDebt = vault.strategies(address(this)).totalDebt; // in sUSD (want)
+        uint256 buffer = totalDebt.mul(susdBuffer).div(DENOMINATOR);
 
-                uint256 maxSlip =
-                    expectedOut.mul(DENOMINATOR.sub(slippageProtectionIn)).div(
-                        DENOMINATOR
-                    );
+        uint256 _sUSDToInvest = _sUSDBalance > buffer
+            ? _sUSDBalance.sub(buffer)
+            : 0;
+        uint256 _sUSDNeeded = _sUSDToInvest == 0 ? buffer.sub(_sUSDBalance) : 0;
+        uint256 _synthToSell = _sUSDNeeded > 0
+            ? _synthFromSUSD(_sUSDNeeded)
+            : 0; // amount of Synth that we need to sell to refill buffer
+        uint256 _synthToInvest = looseSynth > _synthToSell
+            ? looseSynth.sub(_synthToSell)
+            : 0;
+        // how much loose Synth, available to invest, we will have after buying sUSD?
+        // if we cannot invest synth (either due to Synthetix waiting period OR because we don't have enough available)
+        // we buy synth with sUSD and return (due to Synthetix waiting period we cannot do anything else)
+        if (
+            _exchanger().maxSecsLeftInWaitingPeriod(
+                address(this),
+                synthCurrencyKey
+            ) ==
+            0 &&
+            _synthToInvest > DUST_THRESHOLD
+        ) {
+            // 2. Supply liquidity (single sided) to Curve Pool
+            // calculate LP tokens that we will receive
+            uint256 expectedOut = _synthToInvest.mul(1e18).div(
+                virtualPriceToSynth()
+            );
 
-                //pool size cannot be more than 4 or less than 2
-                if (poolSize == 2) {
-                    uint256[2] memory amounts;
-                    amounts[uint256(curveId)] = _wantToInvest;
-                    if (hasUnderlying) {
-                        curvePool.add_liquidity(amounts, maxSlip, true);
-                    } else {
-                        curvePool.add_liquidity(amounts, maxSlip);
-                    }
-                } else if (poolSize == 3) {
-                    uint256[3] memory amounts;
-                    amounts[uint256(curveId)] = _wantToInvest;
-                    if (hasUnderlying) {
-                        curvePool.add_liquidity(amounts, maxSlip, true);
-                    } else {
-                        curvePool.add_liquidity(amounts, maxSlip);
-                    }
+            // Minimum amount of LP tokens to mint
+            uint256 minMint = expectedOut
+            .mul(DENOMINATOR.sub(slippageProtectionIn))
+            .div(DENOMINATOR);
+
+            ensureAllowance(
+                address(curvePool),
+                address(_synthCoin()),
+                _synthToInvest
+            );
+
+            // NOTE: pool size cannot be more than 4 or less than 2
+            if (poolSize == 2) {
+                uint256[2] memory amounts;
+                amounts[uint256(curveId)] = _synthToInvest;
+                if (hasUnderlying) {
+                    curvePool.add_liquidity(amounts, minMint, true);
                 } else {
-                    uint256[4] memory amounts;
-                    amounts[uint256(curveId)] = _wantToInvest;
-                    if (hasUnderlying) {
-                        curvePool.add_liquidity(amounts, maxSlip, true);
-                    } else {
-                        curvePool.add_liquidity(amounts, maxSlip);
-                    }
+                    curvePool.add_liquidity(amounts, minMint);
                 }
-
-                //now add to yearn
-                yvToken.deposit();
-
-                lastInvest = block.timestamp;
+            } else if (poolSize == 3) {
+                uint256[3] memory amounts;
+                amounts[uint256(curveId)] = _synthToInvest;
+                if (hasUnderlying) {
+                    curvePool.add_liquidity(amounts, minMint, true);
+                } else {
+                    curvePool.add_liquidity(amounts, minMint);
+                }
             } else {
-                require(false, "quee");
+                uint256[4] memory amounts;
+                amounts[uint256(curveId)] = _synthToInvest;
+                if (hasUnderlying) {
+                    curvePool.add_liquidity(amounts, minMint, true);
+                } else {
+                    curvePool.add_liquidity(amounts, minMint);
+                }
             }
 
-            /*if(curveId == 0){
-                amounts = [_wantToInvest, 0];
-            }else{
-                amounts = [0, _wantToInvest];
-            }*/
+            // 3. Deposit LP tokens in yVault
+            uint256 lpBalance = curveToken.balanceOf(address(this));
+
+            if (lpBalance > 0) {
+                ensureAllowance(
+                    address(yvToken),
+                    address(curveToken),
+                    lpBalance
+                );
+                yvToken.deposit();
+            }
+            lastInvest = block.timestamp;
+        }
+
+        if (_synthToSell == 0) {
+            // This will invest all available sUSD (exchanging to Synth first)
+            // Exchange amount of sUSD to Synth
+            _sUSDToInvest = Math.min(
+                _sUSDToInvest,
+                _sUSDFromSynth(maxSingleInvest)
+            );
+            if (_sUSDToInvest == 0) {
+                return;
+            }
+            exchangeSUSDToSynth(_sUSDToInvest);
+            // now the waiting period starts
+        } else if (_synthToSell >= DUST_THRESHOLD) {
+            // this means that we need to refill the buffer
+            // we may have already some uninvested Synth so we use it (and avoid withdrawing from Curve's Pool)
+            uint256 available = _synthToSUSD(_balanceOfSynth());
+            uint256 sUSDToWithdraw = _sUSDNeeded > available
+                ? _sUSDNeeded.sub(available)
+                : 0;
+            // this will withdraw and sell full balance of Synth (inside withdrawSomeWant)
+            if (sUSDToWithdraw > 0) {
+                withdrawSomeWant(sUSDToWithdraw);
+            }
+            // now the waiting period starts
+        }
+    }
+
+    function ensureAllowance(
+        address _spender,
+        address _token,
+        uint256 _amount
+    ) internal {
+        if (IERC20(_token).allowance(address(this), _spender) < _amount) {
+            IERC20(_token).safeApprove(_spender, 0);
+            IERC20(_token).safeApprove(_spender, type(uint256).max);
         }
     }
 
@@ -540,9 +535,9 @@ contract Strategy is BaseStrategy {
         override
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
-        uint256 wantBal = want.balanceOf(address(this));
+        uint256 wantBal = _balanceOfSUSD(); // want is always sUSD
         if (wantBal < _amountNeeded) {
-            (_liquidatedAmount, _loss) = withdrawSome(
+            (_liquidatedAmount, _loss) = withdrawSomeWant(
                 _amountNeeded.sub(wantBal)
             );
         }
@@ -554,75 +549,86 @@ contract Strategy is BaseStrategy {
     }
 
     //safe to enter more than we have
-    function withdrawSome(uint256 _amount)
+    function withdrawSomeWant(uint256 _amount)
         internal
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
-        uint256 wantBalanceBefore = want.balanceOf(address(this));
+        uint256 sUSDBalanceBefore = _balanceOfSUSD();
 
-        //let's take the amount we need if virtual price is real. Let's add the
-        uint256 virtualPrice = virtualPriceToWant();
-        uint256 amountWeNeedFromVirtualPrice =
-            _amount.mul(1e18).div(virtualPrice);
+        // LPtoken virtual price in Synth
+        uint256 virtualPrice = virtualPriceToSynth();
 
-        uint256 crvBeforeBalance = curveToken.balanceOf(address(this)); //should be zero but just incase...
+        // 1. We calculate how many LP tokens we need to burn to get requested want
+        uint256 amountWeNeedFromVirtualPrice = _synthFromSUSD(_amount)
+        .mul(1e18)
+        .div(virtualPrice);
 
+        // 2. Withdraw LP tokens from yVault
+        uint256 crvBeforeBalance = curveToken.balanceOf(address(this));
+
+        // Calculate how many shares we need to burn to get the amount of LP tokens that we want
         uint256 pricePerFullShare = yvToken.pricePerShare();
-        uint256 amountFromVault =
-            amountWeNeedFromVirtualPrice.mul(1e18).div(pricePerFullShare);
+        uint256 amountFromVault = amountWeNeedFromVirtualPrice.mul(1e18).div(
+            pricePerFullShare
+        );
 
+        // cap to our yShares balance
         uint256 yBalance = yvToken.balanceOf(address(this));
-
         if (amountFromVault > yBalance) {
             amountFromVault = yBalance;
-            //this is not loss. so we amend amount
+            // this is not loss. so we amend amount
 
-            uint256 _amountOfCrv =
-                amountFromVault.mul(pricePerFullShare).div(1e18);
+            uint256 _amountOfCrv = amountFromVault.mul(pricePerFullShare).div(
+                1e18
+            );
             _amount = _amountOfCrv.mul(virtualPrice).div(1e18);
         }
 
-        yvToken.withdraw(amountFromVault);
-        if (withdrawProtection) {
-            //this tests that we liquidated all of the expected ytokens. Without it if we get back less then will mark it is loss
-            require(
-                yBalance.sub(yvToken.balanceOf(address(this))) >=
-                    amountFromVault.sub(1),
-                "YVAULTWITHDRAWFAILED"
+        if (amountFromVault > 0) {
+            // Added explicit maxLoss protection in case something goes wrong
+            yvToken.withdraw(amountFromVault, address(this), maxLoss);
+
+            if (withdrawProtection) {
+                //this tests that we liquidated all of the expected ytokens. Without it if we get back less then will mark it is loss
+                require(
+                    yBalance.sub(yvToken.balanceOf(address(this))) >=
+                        amountFromVault.sub(1),
+                    "YVAULTWITHDRAWFAILED"
+                );
+            }
+
+            // 3. Get coins back by burning LP tokens
+            // We are going to burn the amount of LP tokens we just withdrew
+            uint256 toBurn = curveToken.balanceOf(address(this)).sub(
+                crvBeforeBalance
             );
+
+            // amount of synth we expect to receive
+            uint256 toWithdraw = toBurn.mul(virtualPriceToSynth()).div(1e18);
+
+            // minimum amount of coins we are going to receive
+            uint256 minAmount = toWithdraw
+            .mul(DENOMINATOR.sub(slippageProtectionOut))
+            .div(DENOMINATOR);
+
+            if (hasUnderlying) {
+                curvePool.remove_liquidity_one_coin(
+                    toBurn,
+                    curveId,
+                    minAmount,
+                    true
+                );
+            } else {
+                curvePool.remove_liquidity_one_coin(toBurn, curveId, minAmount);
+            }
         }
 
-        uint256 toWithdraw =
-            curveToken.balanceOf(address(this)).sub(crvBeforeBalance);
-
-        //if we have less than 18 decimals we need to lower the amount out
-        uint256 maxSlippage =
-            toWithdraw.mul(DENOMINATOR.sub(slippageProtectionOut)).div(
-                DENOMINATOR
-            );
-        if (want_decimals < 18) {
-            maxSlippage = maxSlippage.div(
-                10**(uint256(uint8(18) - want_decimals))
-            );
+        // 4. Exchange the full balance of Synth for sUSD (want)
+        if (_balanceOfSynth() > DUST_THRESHOLD) {
+            exchangeSynthToSUSD();
         }
 
-        if (hasUnderlying) {
-            curvePool.remove_liquidity_one_coin(
-                toWithdraw,
-                curveId,
-                maxSlippage,
-                true
-            );
-        } else {
-            curvePool.remove_liquidity_one_coin(
-                toWithdraw,
-                curveId,
-                maxSlippage
-            );
-        }
-
-        uint256 diff = want.balanceOf(address(this)).sub(wantBalanceBefore);
-
+        uint256 diff = _balanceOfSUSD().sub(sUSDBalanceBefore);
         if (diff > _amount) {
             _liquidatedAmount = _amount;
         } else {
@@ -631,10 +637,22 @@ contract Strategy is BaseStrategy {
         }
     }
 
-    // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary
+    function manualRemoveFullLiquidity()
+        external
+        onlyGovernance
+        returns (uint256 _liquidatedAmount, uint256 _loss)
+    {
+        // It will remove max amount of assets and trade sETH for sUSD
+        // the Synthetix waiting period will start (and harvest can be called 6 mins later)
+        (_liquidatedAmount, _loss) = withdrawSomeWant(estimatedTotalAssets());
+    }
 
     function prepareMigration(address _newStrategy) internal override {
+        // only yvToken and want balances should be required but we do all of them to avoid having them stuck in strategy's middle steps
+        // want balance is sent from BaseStrategy's migrate method
         yvToken.transfer(_newStrategy, yvToken.balanceOf(address(this)));
+        curveToken.transfer(_newStrategy, curveToken.balanceOf(address(this)));
+        IERC20(address(_synthCoin())).transfer(_newStrategy, _balanceOfSynth());
     }
 
     // Override this to add all tokens/tokenized positions this contract manages

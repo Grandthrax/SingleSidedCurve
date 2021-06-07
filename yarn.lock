@@ -166,10 +166,10 @@
   resolved "https://registry.yarnpkg.com/@commitlint/types/-/types-11.0.0.tgz#719cf05fcc1abb6533610a2e0f5dd1e61eac14fe"
   integrity sha512-VoNqai1vR5anRF5Tuh/+SWDFk7xi7oMwHrHrbm1BprYXjB2RJsWLhUrStMssDxEl5lW/z3EUdg8RvH/IUBccSQ==
 
-"@solidity-parser/parser@^0.13.0":
-  version "0.13.1"
-  resolved "https://registry.yarnpkg.com/@solidity-parser/parser/-/parser-0.13.1.tgz#233da4588e4e593ebca0e4c920d3bac1c3bf472c"
-  integrity sha512-V2iBpgVOgWGDQa221hiPjdhKnLcFYltQH1uwT42nu6qn4VX+jq7KLr6Fs31pmIpxaGbOmiKneKHXJ+BL8rO+xQ==
+"@solidity-parser/parser@^0.13.2":
+  version "0.13.2"
+  resolved "https://registry.yarnpkg.com/@solidity-parser/parser/-/parser-0.13.2.tgz#b6c71d8ca0b382d90a7bbed241f9bc110af65cbe"
+  integrity sha512-RwHnpRnfrnD2MSPveYoPh8nhofEvX7fgjHk1Oq+NNvCcLx4r1js91CO9o+F/F3fBzOCyvm8kKRTriFICX/odWw==
   dependencies:
     antlr4ts "^0.5.0-alpha.4"
 
@@ -731,11 +731,6 @@ diff@^3.5.0:
   version "3.5.0"
   resolved "https://registry.yarnpkg.com/diff/-/diff-3.5.0.tgz#800c0dd1e0a8bfbc95835c202ad220fe317e5a12"
   integrity sha512-A46qtFgd+g7pDZinpnwiRJtxbC1hpgf0uzP3iG89scHk0AUC7A1TGxf5OiiOUv/JMZR8GOt8hL900hV0bOy5xA==
-
-dir-to-object@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/dir-to-object/-/dir-to-object-2.0.0.tgz#29723e9bd1c3e58e4f307bd04ff634c0370c8f8a"
-  integrity sha512-sXs0JKIhymON7T1UZuO2Ud6VTNAx/VTBXIl4+3mjb2RgfOpt+hectX0x04YqPOPdkeOAKoJuKqwqnXXURNPNEA==
 
 dot-prop@^5.1.0:
   version "5.3.0"
@@ -1980,21 +1975,19 @@ preserve@^0.2.0:
   resolved "https://registry.yarnpkg.com/preserve/-/preserve-0.2.0.tgz#815ed1f6ebc65926f865b310c0713bcb3315ce4b"
   integrity sha1-gV7R9uvGWSb4ZbMQwHE7yzMVzks=
 
-prettier-plugin-solidity@^1.0.0-beta.11:
-  version "1.0.0-beta.11"
-  resolved "https://registry.yarnpkg.com/prettier-plugin-solidity/-/prettier-plugin-solidity-1.0.0-beta.11.tgz#580a16cab6517ab20cd08e65afd0300caa32125d"
-  integrity sha512-b3lh/9tn9BC3I723Aa91zebw2NDlbbBroKg7izP+jU0QfrLO6ldi0jY0XrqX3+zGqAI2aLcP8Jr1eGdymK5CgQ==
+prettier-plugin-solidity@^1.0.0-alpha.57:
+  version "1.0.0-beta.13"
+  resolved "https://registry.yarnpkg.com/prettier-plugin-solidity/-/prettier-plugin-solidity-1.0.0-beta.13.tgz#2e31c5a5e2df3239e5e93704f9bcafe09a5f8190"
+  integrity sha512-AWMDRSabpNQMX7EqdDKgx/UVtQY6e3/Iu4gSPYDGvgiWl+OY8kYhAMll2NZHK/X+F0YYpPHYpebkDh7MGxbB1g==
   dependencies:
-    "@solidity-parser/parser" "^0.13.0"
-    dir-to-object "^2.0.0"
+    "@solidity-parser/parser" "^0.13.2"
     emoji-regex "^9.2.2"
     escape-string-regexp "^4.0.0"
-    prettier "^2.2.1"
     semver "^7.3.5"
     solidity-comments-extractor "^0.0.7"
     string-width "^4.2.2"
 
-prettier@^2.2.1, prettier@^2.3.0:
+prettier@^2.3.0:
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/prettier/-/prettier-2.3.0.tgz#b6a5bf1284026ae640f17f7ff5658a7567fc0d18"
   integrity sha512-kXtO4s0Lz/DW/IJ9QdWhAf7/NmPWQXkFr/r/WkR3vyI+0v8amTDxiaQSLzs8NBlytfLWX/7uQUMIW677yLKl4w==
