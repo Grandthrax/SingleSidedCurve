@@ -25,22 +25,23 @@ interface IUni {
 // Import interfaces for many popular DeFi projects, or add your own!
 //import "../interfaces/<protocol>/<Interface>.sol";
 
-contract Strategy is BaseStrategy {
+contract StrategySusdv2 is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
     ICurveFi public curvePool;// =  ICurveFi(address(0x4CA9b3063Ec5866A4B82E437059D2C43d1be596F));
+    Zap public zapOut;
     ICurveFi public basePool;
     ICrvV3 public curveToken;// = ICrvV3(address(0xb19059ebb43466C323583928285a49f558E572Fd));
 
-    address public constant weth = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    address public constant uniswapRouter = address(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    address public constant weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant uniswapRouter = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
 
     VaultAPI public yvToken;// = IVaultV1(address(0x46AFc2dfBd1ea0c0760CAD8262A5838e803A37e5));
     //IERC20Extended public middleToken; // the token between bluechip and curve pool
 
-    uint256 public lastInvest = 0;
+    uint256 public lastInvest;
     uint256 public minTimePerInvest;// = 3600;
     uint256 public maxSingleInvest;// // 2 hbtc per hour default
     uint256 public slippageProtectionIn;// = 50; //out of 10000. 50 = 0.5%
@@ -63,13 +64,14 @@ contract Strategy is BaseStrategy {
         uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
+        address _zapOut,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
         address _metaToken,
         bool _hasUnderlying
     ) public BaseStrategy(_vault) {
-         _initializeStrat(_maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
+         _initializeStrat(_maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _zapOut, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
     }
 
     function initialize(
@@ -79,6 +81,7 @@ contract Strategy is BaseStrategy {
         uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
+        address _zapOut,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
@@ -87,7 +90,7 @@ contract Strategy is BaseStrategy {
     ) external {
         //note: initialise can only be called once. in _initialize in BaseStrategy we have: require(address(want) == address(0), "Strategy already initialized");
         _initialize(_vault, _strategist, _strategist, _strategist);
-        _initializeStrat(_maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
+        _initializeStrat(_maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _zapOut, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
     }
 
     function _initializeStrat(
@@ -95,6 +98,7 @@ contract Strategy is BaseStrategy {
         uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
+        address _zapOut,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
@@ -104,10 +108,10 @@ contract Strategy is BaseStrategy {
         require(want_decimals == 0, "Already Initialized");
         require(_poolSize > 1 && _poolSize < 5, "incorrect pool size");
 
-
         curvePool = ICurveFi(_curvePool);
+        zapOut = Zap(_zapOut);
 
-        if(_metaToken != address(0)){
+        if(_metaToken != address(0)) {
             basePool = ICurveFi(curvePool.pool());
             metaToken = _metaToken;
 
@@ -127,21 +131,21 @@ contract Strategy is BaseStrategy {
                 }
             }
 
-        }else{
+        } else {
             basePool = ICurveFi(_curvePool);
+
             if(curvePool.coins(0) == address(want) || (_hasUnderlying && curvePool.underlying_coins(0) == address(want) )){
-                curveId =0;
+                curveId = 0;
             }else if ( curvePool.coins(1) == address(want) || (_hasUnderlying && curvePool.underlying_coins(1) == address(want) )){
-                curveId =1;
+                curveId = 1;
             }else if ( curvePool.coins(2) == address(want) || (_hasUnderlying && curvePool.underlying_coins(2) == address(want) )){
-                curveId =2;
+                curveId = 2;
             }else if ( curvePool.coins(3) == address(want) || (_hasUnderlying && curvePool.underlying_coins(3) == address(want) )){
                 //will revert if there are not enough coins
-            curveId =3;
+            curveId = 3;
             }else{
                 require(false, "incorrect want for curve pool");
             }
-
         }
 
         maxSingleInvest = _maxSingleInvest;
@@ -167,6 +171,7 @@ contract Strategy is BaseStrategy {
         want_decimals = IERC20Extended(address(want)).decimals();
 
         want.safeApprove(address(curvePool), uint256(-1));
+        curveToken.approve(address(zapOut), uint256(-1));
 
         //deposit contract needs permissions
         if(metaToken != address(0)){
@@ -184,6 +189,7 @@ contract Strategy is BaseStrategy {
         uint256 _minTimePerInvest,
         uint256 _slippageProtectionIn,
         address _curvePool,
+        address _zapOut,
         address _curveToken,
         address _yvToken,
         uint256 _poolSize,
@@ -201,7 +207,7 @@ contract Strategy is BaseStrategy {
             newStrategy := create(0, clone_code, 0x37)
         }
 
-        Strategy(newStrategy).initialize(_vault, _strategist, _maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
+        StrategySusdv2(newStrategy).initialize(_vault, _strategist, _maxSingleInvest, _minTimePerInvest, _slippageProtectionIn, _curvePool, _zapOut, _curveToken, _yvToken, _poolSize, _metaToken, _hasUnderlying);
 
         emit Cloned(newStrategy);
 
@@ -485,9 +491,9 @@ contract Strategy is BaseStrategy {
         }
 
         if(hasUnderlying){
-            curvePool.remove_liquidity_one_coin(toWithdraw, curveId, maxSlippage, true);
+            zapOut.remove_liquidity_one_coin(toWithdraw, curveId, maxSlippage, true);
         }else{
-            curvePool.remove_liquidity_one_coin(toWithdraw, curveId, maxSlippage);
+            zapOut.remove_liquidity_one_coin(toWithdraw, curveId, maxSlippage);
         }
 
 
