@@ -20,13 +20,6 @@ def live_vault_usdt(pm):
     yield vault
 
 @pytest.fixture
-def live_vault_dai(interface):
-    vault = interface.IVaultV2('0x19D3364A399d251E894aC732651be8B0E4e85001')
-    yield vault
-
-
-
-@pytest.fixture
 def wbtc(interface):
     #this one is hbtc
     yield interface.ERC20('0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599')
@@ -100,7 +93,7 @@ def yvaultv2Pbtc(interface):
 @pytest.fixture
 def yvaultv2Tusd(interface):
     yield interface.IVaultV2('0xf8768814b88281DE4F532a3beEfA5b85B69b9324')
-    
+
 @pytest.fixture
 def yhbtcstrategyv2(Strategy):
     yield Strategy.at('0x91cBf0014a966615e1050c90A1aBf1d1d5d8cffd')
@@ -188,7 +181,7 @@ def zeroaddress():
 @pytest.fixture
 def sbtccrv(interface):
     yield interface.ICrvV3('0x075b1bb99792c9E1041bA13afEf80C91a1e70fB3')
-    
+
 @pytest.fixture
 def healthcheck(Contract):
     yield Contract('0xDDCea799fF1699e98EDF118e0629A974Df7DF012')
@@ -229,7 +222,7 @@ def ibCurvePool(interface):
 @pytest.fixture
 def ib3CRV(interface):
     yield interface.ICrvV3('0x5282a4eF67D9C33135340fB3289cc1711c13638C')
-    
+
 
 @pytest.fixture
 def devms(accounts):
@@ -244,7 +237,7 @@ def stratms(accounts):
 def orb(accounts):
     acc = accounts.at('0x710295b5f326c2e47e6dd2e7f6b5b0f7c5ac2f24', force=True)
     yield acc
-    
+
 
 @pytest.fixture
 def ychad(accounts):
@@ -259,7 +252,7 @@ def samdev(accounts):
     acc = accounts.at('0xC3D6880fD95E06C816cB030fAc45b3ffe3651Cb0', force=True)
 
 
-    
+
     yield acc
 
 @pytest.fixture
@@ -295,7 +288,7 @@ def vault(pm, gov, rewards, guardian, currency):
     vault.initialize(currency, gov, rewards, "", "", guardian)
     vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
     yield vault
-    
+
 @pytest.fixture
 def wbtc_vault(pm, gov, rewards, guardian, wbtc):
     currency = wbtc
@@ -367,7 +360,7 @@ def strategy_usdt_ib(strategist,Strategy, keeper, live_usdt_vault, live_strategy
     #strategy = strategist.deploy(Strategy, live_usdt_vault, 500_000*1e6, 3600, 500, ibCurvePool, ib3CRV, ibyvault,3, True)
     tx = live_strategy_wbtc.cloneSingleSidedCurve(live_usdt_vault, strategist, strategist, strategist, 500_000*1e6, 3600, 500, ibCurvePool, ib3CRV, ibyvault,3, True, "ssc ib3crv",{'from': strategist})
     yield Strategy.at(tx.return_value)
-    
+
 
 @pytest.fixture
 def strategy_dai_ib(strategist, keeper, live_vault_dai, Strategy, ibCurvePool, ib3CRV, ibyvault,healthcheck):
@@ -438,13 +431,13 @@ def live_strategy_wbtc_obtc(gov, keeper, live_wbtc_vault,healthcheck, Strategy, 
 @pytest.fixture
 def strategy_hbtc_hbtc(gov, keeper, hbtc_vault, Strategy, curvePool, hCRV, yvaultv2, zeroaddress):
     strategy = gov.deploy(Strategy, hbtc_vault, 30*1e18, 3600, 500, curvePool, hCRV, yvaultv2,2, zeroaddress, False,  "ssc hbtc hbtc")
-    
+
     yield strategy
 
 @pytest.fixture
 def strategy_hbtc_hbtc_live(Strategy):
     strategy = Strategy.at('0x3F64bb4C334488765A82a697cb210DA9BB876B67')
-    
+
     yield strategy
 
 @pytest.fixture
@@ -452,7 +445,7 @@ def clonedstrategy_hbtc_hbtc(strategist, strategy_hbtc_hbtc, keeper, hbtc_vault,
     strategy = strategy_hbtc_hbtc
     tx = strategy.cloneSingleSidedCurve(hbtc_vault, strategist, 30*1e18, 3600, 500, curvePool, hCRV, yvaultv2,2, zeroaddress, False,  "ssc hbtc hbtc")
     new_strategy = Strategy.at(tx.return_value)
-    
+
     yield new_strategy
 
 @pytest.fixture
@@ -460,7 +453,7 @@ def clonedstrategy_hbtc_hbtc(strategist, strategy_hbtc_hbtc, keeper, hbtc_vault,
     strategy = strategy_hbtc_hbtc
     tx = strategy.cloneSingleSidedCurve(hbtc_vault, strategist, 30*1e18, 3600, 500, curvePool, hCRV, yvaultv2,2, zeroaddress, False,  "ssc hbtc hbtc")
     new_strategy = Strategy.at(tx.return_value)
-    
+
     yield new_strategy
 
 @pytest.fixture
@@ -468,31 +461,6 @@ def strategy(strategist, keeper, vault, Strategy):
     strategy = strategist.deploy(Strategy, vault, 2*1e18)
     strategy.setKeeper(keeper)
     yield strategy
-
-@pytest.fixture
-def zapper(strategist, ZapSteth):
-    zapper = strategist.deploy(ZapSteth)
-    yield zapper
-
-
-@pytest.fixture
-def nocoiner(accounts):
-    # Has no tokens (DeFi is a ponzi scheme!)
-    yield accounts[5]
-
-
-@pytest.fixture
-def pleb(accounts, andre, token, vault):
-    # Small fish in a big pond
-    a = accounts[6]
-    # Has 0.01% of tokens (heard about this new DeFi thing!)
-    bal = token.totalSupply() // 10000
-    token.transfer(a, bal, {"from": andre})
-    # Unlimited Approvals
-    token.approve(vault, 2 ** 256 - 1, {"from": a})
-    # Deposit half their stack
-    vault.deposit(bal // 2, {"from": a})
-    yield a
 
 
 @pytest.fixture
@@ -507,19 +475,3 @@ def chad(accounts, andre, token, vault):
     # Deposit half their stack
     vault.deposit(bal // 2, {"from": a})
     yield a
-
-
-@pytest.fixture
-def greyhat(accounts, andre, token, vault):
-    # Chaotic evil, will eat you alive
-    a = accounts[8]
-    # Has 1% of tokens (earned them the *hard way*)
-    bal = token.totalSupply() // 100
-    token.transfer(a, bal, {"from": andre})
-    # Unlimited Approvals
-    token.approve(vault, 2 ** 256 - 1, {"from": a})
-    # Deposit half their stack
-    vault.deposit(bal // 2, {"from": a})
-    yield a
-
-
