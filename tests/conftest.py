@@ -24,6 +24,11 @@ def live_vault_usdt(pm):
 
 
 @pytest.fixture
+def mim(interface):
+    yield interface.ERC20("0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3")
+
+
+@pytest.fixture
 def wbtc(interface):
     # this one is hbtc
     yield interface.ERC20("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599")
@@ -105,6 +110,11 @@ def yvaultv2Pbtc(interface):
 
 
 @pytest.fixture
+def yvaultv2Mim(interface):
+    yield interface.IVaultV2("0x2DfB14E32e2F8156ec15a2c21c3A6c053af52Be8")
+
+
+@pytest.fixture
 def yvaultv2Tusd(interface):
     yield interface.IVaultV2("0xf8768814b88281DE4F532a3beEfA5b85B69b9324")
 
@@ -145,6 +155,16 @@ def live_wbtc_vault(pm):
 def live_hbtc_vault(pm):
     Vault = pm(config["dependencies"][0]).Vault
     vault = Vault.at("0x0F6121fB28C7C42916d663171063c62684598f9F")
+    yield vault
+
+
+@pytest.fixture
+def mim_vault(pm, gov, rewards, guardian, mim):
+    currency = mim
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = gov.deploy(Vault)
+    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
     yield vault
 
 
@@ -241,6 +261,11 @@ def depositUsdn(interface):
 @pytest.fixture
 def curvePoolObtc(interface):
     yield interface.ICurveFi("0xd5BCf53e2C81e1991570f33Fa881c49EEa570C8D")
+
+
+@pytest.fixture
+def curvePoolMim(interface):
+    yield interface.ICurveFi("0x5a6A4D54456819380173272A5E8E9B9904BdF41B")
 
 
 @pytest.fixture
@@ -540,6 +565,36 @@ def strategy_wbtc_obtc(
         sbtccrv,
         False,
         "ssc wbtc obtc",
+    )
+    strategy.setHealthCheck(healthcheck)
+    strategy.setKeeper(keeper)
+    yield strategy
+
+
+@pytest.fixture
+def strategy_mim_mim(
+    gov,
+    keeper,
+    mim_vault,
+    healthcheck,
+    Strategy,
+    curvePoolMim,
+    zeroaddress,
+    yvaultv2Mim,
+):
+    strategy = gov.deploy(
+        Strategy,
+        mim_vault,
+        1_000_000 * 1e18,  # max single invest
+        3600,  # min time per invest
+        10_000,  # slippage protection in
+        curvePoolMim,  # curve pool
+        curvePoolMim,  # curve token
+        yvaultv2Mim,  # yVault
+        2,  # pool size
+        zeroaddress,  # meta token
+        False,  # has underlying
+        "ssc mim mim",  # strategy name
     )
     strategy.setHealthCheck(healthcheck)
     strategy.setKeeper(keeper)
