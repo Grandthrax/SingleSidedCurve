@@ -1,6 +1,5 @@
 import pytest
-from brownie import config
-from brownie import network
+from brownie import Contract, config, network
 
 
 @pytest.fixture
@@ -155,6 +154,13 @@ def live_wbtc_vault(pm):
 def live_hbtc_vault(pm):
     Vault = pm(config["dependencies"][0]).Vault
     vault = Vault.at("0x0F6121fB28C7C42916d663171063c62684598f9F")
+    yield vault
+
+
+@pytest.fixture
+def live_mim_vault(pm):
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = Vault.at("0x2807387F1212cB2852aB97cdAa3627dACa5E4661")
     yield vault
 
 
@@ -569,6 +575,11 @@ def strategy_wbtc_obtc(
     strategy.setHealthCheck(healthcheck)
     strategy.setKeeper(keeper)
     yield strategy
+
+
+@pytest.fixture
+def live_strategy_mim_mim():
+    yield Contract("0x56371B45Cf4ADB082B0B3C49928b9B9e311F223C")
 
 
 @pytest.fixture
