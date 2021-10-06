@@ -23,6 +23,11 @@ def live_vault_usdt(pm):
 
 
 @pytest.fixture
+def gusd(interface):
+    yield interface.ERC20("0x056Fd409E1d7A124BD7017459dFEa2F387b6d5Cd")
+
+
+@pytest.fixture
 def mim(interface):
     yield interface.ERC20("0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3")
 
@@ -109,6 +114,11 @@ def yvaultv2Pbtc(interface):
 
 
 @pytest.fixture
+def yvaultv2Gusd(interface):
+    yield interface.IVaultV2("0x2a38B9B0201Ca39B17B460eD2f11e4929559071E")
+
+
+@pytest.fixture
 def yvaultv2Mim(interface):
     yield interface.IVaultV2("0x2DfB14E32e2F8156ec15a2c21c3A6c053af52Be8")
 
@@ -167,6 +177,16 @@ def live_mim_vault(pm):
 @pytest.fixture
 def mim_vault(pm, gov, rewards, guardian, mim):
     currency = mim
+    Vault = pm(config["dependencies"][0]).Vault
+    vault = gov.deploy(Vault)
+    vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
+    vault.setDepositLimit(2 ** 256 - 1, {"from": gov})
+    yield vault
+
+
+@pytest.fixture
+def gusd_vault(pm, gov, rewards, guardian, gusd):
+    currency = gusd
     Vault = pm(config["dependencies"][0]).Vault
     vault = gov.deploy(Vault)
     vault.initialize(currency, gov, rewards, "", "", guardian, {"from": gov})
@@ -272,6 +292,16 @@ def curvePoolObtc(interface):
 @pytest.fixture
 def curvePoolMim(interface):
     yield interface.ICurveFi("0x5a6A4D54456819380173272A5E8E9B9904BdF41B")
+
+
+@pytest.fixture
+def curvePoolGusd(interface):
+    yield interface.ICurveFi("0x4f062658EaAF2C1ccf8C8e36D6824CDf41167956")
+
+
+@pytest.fixture
+def curveTokenGusd(interface):
+    yield interface.ICrvV3("0xD2967f45c4f384DEEa880F807Be904762a3DeA07")
 
 
 @pytest.fixture
@@ -580,6 +610,37 @@ def strategy_wbtc_obtc(
 @pytest.fixture
 def live_strategy_mim_mim():
     yield Contract("0x56371B45Cf4ADB082B0B3C49928b9B9e311F223C")
+
+
+@pytest.fixture
+def strategy_gusd_gusd(
+    gov,
+    keeper,
+    gusd_vault,
+    healthcheck,
+    Strategy,
+    curvePoolGusd,
+    curveTokenGusd,
+    zeroaddress,
+    yvaultv2Gusd,
+):
+    strategy = gov.deploy(
+        Strategy,
+        gusd_vault,
+        1_000_000 * 1e18,  # max single invest
+        3600,  # min time per invest
+        10_000,  # slippage protection in
+        curvePoolGusd,  # curve pool
+        curveTokenGusd,  # curve token
+        yvaultv2Gusd,  # yVault
+        2,  # pool size
+        zeroaddress,  # meta token
+        False,  # has underlying
+        "ssc gusd gusd",  # strategy name
+    )
+    strategy.setHealthCheck(healthcheck)
+    strategy.setKeeper(keeper)
+    yield strategy
 
 
 @pytest.fixture
