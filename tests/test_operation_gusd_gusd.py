@@ -1,36 +1,28 @@
-from itertools import count
-from brownie import Wei, reverts
-import eth_abi
-from brownie.convert import to_bytes
 from useful_methods import genericStateOfStrat, genericStateOfVault
-import random
-import brownie
 
 
-def test_wbtc_bbtc_live(
-    wbtc,
-    stratms,
-    whale,
+def test_gusd_gusd(
     Strategy,
-    live_strategy_wbtc_bbtc,
+    strategy_gusd_gusd,
     accounts,
-    yvaultv2Bbtc,
+    yvaultv2Gusd,
     chain,
-    live_wbtc_vault,
-    ychad,
+    gusd_vault,
     gov,
     strategist,
     interface,
 ):
-
-    vault = live_wbtc_vault
+    strategist = gov
+    vault = gusd_vault
     currency = interface.ERC20(vault.token())
     decimals = currency.decimals()
     gov = accounts.at(vault.governance(), force=True)
-    strategist = gov
-    strategy = live_strategy_wbtc_bbtc
+    strategy = strategy_gusd_gusd
 
-    yvault = yvaultv2Bbtc
+    # Big gusd whale!
+    whale = accounts.at("0x0548F59fEE79f8832C299e01dCA5c76F034F558e", force=True)
+
+    yvault = yvaultv2Gusd
     # amount = 1000*1e6
     # amounts = [0, 0, amount]
     print("curveid: ", strategy.curveId())
@@ -42,16 +34,17 @@ def test_wbtc_bbtc_live(
     # print("real: ", ibCurvePool.calc_token_amount(amounts, True))
     currency.approve(vault, 2 ** 256 - 1, {"from": whale})
     whale_before = currency.balanceOf(whale)
-    whale_deposit = 30 * (10 ** (decimals))
+    print(currency.name())
+    print(whale_before / (10 ** decimals))
+    whale_deposit = 30_000 * (10 ** (decimals))
     vault.deposit(whale_deposit, {"from": whale})
     vault.setManagementFee(0, {"from": gov})
 
-    idl = Strategy.at(vault.withdrawalQueue(1))
-    vault.updateStrategyDebtRatio(idl, 0, {"from": gov})
-    debt_ratio = 1996
-    idl.harvest({"from": gov})
+    # idl = Strategy.at(vault.withdrawalQueue(1))
+    # vault.updateStrategyDebtRatio(idl, 0 , {"from": gov})
+    # debt_ratio = 2000
     # v0.3.0
-    vault.addStrategy(strategy, debt_ratio, 0, 2 ** 256 - 1, 1000, {"from": gov})
+    vault.addStrategy(strategy, 10000, 0, 2 ** 256 - 1, 1000, {"from": gov})
 
     strategy.harvest({"from": strategist})
     genericStateOfStrat(strategy, currency, vault)
@@ -59,20 +52,23 @@ def test_wbtc_bbtc_live(
     # genericStateOfVault(vault, currency)
     print(yvault.pricePerShare() / 1e18)
 
-    ibcrvStrat1 = Strategy.at(yvault.withdrawalQueue(0))
-    ibcrvStrat2 = Strategy.at(yvault.withdrawalQueue(1))
+    curveStrat = Strategy.at(yvault.withdrawalQueue(0))
+    convexStrat = Strategy.at(yvault.withdrawalQueue(1))
 
     vGov = accounts.at(yvault.governance(), force=True)
-    ibcrvStrat1.harvest({"from": vGov})
-    ibcrvStrat2.harvest({"from": vGov})
-    chain.sleep(2628000)
-    chain.mine(200)
-    ibcrvStrat1.harvest({"from": vGov})
-    ibcrvStrat2.harvest({"from": vGov})
-    chain.sleep(210600)
+    curveStrat.harvest({"from": vGov})
+    convexStrat.harvest({"from": vGov})
+    chain.sleep(21600)
+    chain.mine(1)
+    curveStrat.harvest({"from": vGov})
+    convexStrat.harvest({"from": vGov})
+    chain.sleep(21600)
+    chain.mine(1)
+    curveStrat.harvest({"from": vGov})
+    convexStrat.harvest({"from": vGov})
+    chain.sleep(21600)
     chain.mine(1)
     print(yvault.pricePerShare() / 1e18)
-    # strategy.setDoHealthCheck(False, {"from": gov})
     strategy.harvest({"from": strategist})
     print(vault.strategies(strategy))
     genericStateOfStrat(strategy, currency, vault)
@@ -80,9 +76,11 @@ def test_wbtc_bbtc_live(
     chain.sleep(21600)
     chain.mine(1)
 
-    vault.withdraw({"from": whale})
+    vault.withdraw(vault.balanceOf(whale), whale, 200, {"from": whale})
     whale_after = currency.balanceOf(whale)
-    print("profit =", (whale_after - whale_before) / (10 ** (decimals)))
+    profit = whale_after - whale_before
+    print("profit =", profit / (10 ** (decimals)))
+    assert profit > 0
     print("balance left =", vault.balanceOf(whale))
     genericStateOfStrat(strategy, currency, vault)
     genericStateOfVault(vault, currency)

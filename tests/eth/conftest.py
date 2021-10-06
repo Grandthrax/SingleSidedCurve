@@ -1,6 +1,7 @@
 import pytest
 from brownie import Contract, ZERO_ADDRESS, Wei
 
+
 @pytest.fixture
 def live_yvweth_032():
     yield Contract("0xa9fE4601811213c340e850ea305481afF02f5b28")
@@ -32,7 +33,9 @@ def old_seth_strategy():
 
 
 @pytest.fixture
-def strategy(Strategy, strategist, live_yvweth_032, seth_pool, seth_crv_token, yvToken_crvSETH):
+def strategy(
+    Strategy, strategist, live_yvweth_032, seth_pool, seth_crv_token, yvToken_crvSETH
+):
     yield Strategy.deploy(
         live_yvweth_032,
         Wei("100 ether"),
@@ -45,7 +48,7 @@ def strategy(Strategy, strategist, live_yvweth_032, seth_pool, seth_crv_token, y
         ZERO_ADDRESS,
         False,
         "ssc_eth_seth",
-        {"from": strategist}
+        {"from": strategist},
     )
 
 
@@ -70,7 +73,9 @@ def yvToken_crvSTETH():
 
 
 @pytest.fixture
-def ste_strategy_clone(strategy, steth_pool, steth_crv_token, yvToken_crvSTETH, strategist):
+def ste_strategy_clone(
+    strategy, steth_pool, steth_crv_token, yvToken_crvSTETH, strategist
+):
     cloned_strategy_address = strategy.cloneSingleSidedCurve(
         strategy.vault(),
         strategist,
@@ -84,7 +89,7 @@ def ste_strategy_clone(strategy, steth_pool, steth_crv_token, yvToken_crvSTETH, 
         ZERO_ADDRESS,
         False,
         "ssc_eth_steth",
-        {"from": strategist}
+        {"from": strategist},
     ).return_value
 
     yield Contract.from_abi("Strategy", cloned_strategy_address, strategy.abi)
@@ -101,7 +106,9 @@ def live_yvweth_042():
 
 
 @pytest.fixture
-def ste_strategy_clone_042(live_yvweth_042, strategy, steth_pool, steth_crv_token, yvToken_crvSTETH, strategist):
+def ste_strategy_clone_042(
+    live_yvweth_042, strategy, steth_pool, steth_crv_token, yvToken_crvSTETH, strategist
+):
     cloned_strategy_address = strategy.cloneSingleSidedCurve(
         live_yvweth_042,
         strategist,
@@ -115,14 +122,16 @@ def ste_strategy_clone_042(live_yvweth_042, strategy, steth_pool, steth_crv_toke
         ZERO_ADDRESS,
         False,
         "ssc_eth_steth",
-        {"from": strategist}
+        {"from": strategist},
     ).return_value
 
     yield Contract.from_abi("Strategy", cloned_strategy_address, strategy.abi)
 
 
 @pytest.fixture
-def seth_strategy_clone_042(live_yvweth_042, strategy, seth_pool, seth_crv_token, yvToken_crvSETH, strategist):
+def seth_strategy_clone_042(
+    live_yvweth_042, strategy, seth_pool, seth_crv_token, yvToken_crvSETH, strategist
+):
     cloned_strategy_address = strategy.cloneSingleSidedCurve(
         live_yvweth_042,
         strategist,
@@ -136,7 +145,7 @@ def seth_strategy_clone_042(live_yvweth_042, strategy, seth_pool, seth_crv_token
         ZERO_ADDRESS,
         False,
         "ssc_eth_seth",
-        {"from": strategist}
+        {"from": strategist},
     ).return_value
 
     yield Contract.from_abi("Strategy", cloned_strategy_address, strategy.abi)
